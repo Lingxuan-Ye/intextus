@@ -1,3 +1,7 @@
+mod iter;
+
+pub use self::iter::IntoIter;
+
 use crate::buf::Buf;
 use core::fmt;
 use core::hash::{Hash, Hasher};
@@ -245,7 +249,7 @@ where
 {
     fn clone(&self) -> Self {
         let mut vec = Self::new();
-        for value in self.as_slice() {
+        for value in self {
             let index = vec.len;
             let value = value.clone();
             unsafe {
