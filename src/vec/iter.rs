@@ -59,9 +59,9 @@ where
 {
     fn clone(&self) -> Self {
         let index = self.index;
-        let mut buf = ManuallyDrop::new(InlineVec::new());
-        buf.len = self.index;
+        let buf = ManuallyDrop::new(InlineVec::new());
         let mut iter = Self { index, buf };
+        iter.buf.len = self.index;
         while iter.buf.len != self.buf.len {
             let index = iter.buf.len;
             unsafe {
