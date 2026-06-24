@@ -3,6 +3,8 @@ mod iter;
 pub use self::iter::IntoIter;
 
 use crate::buf::Buf;
+use core::borrow::{Borrow, BorrowMut};
+use core::cmp::Ordering;
 use core::fmt;
 use core::hash::{Hash, Hasher};
 use core::mem::MaybeUninit;
@@ -285,12 +287,66 @@ where
     }
 }
 
+impl<T, const N: usize, U, const M: usize> PartialOrd<InlineVec<U, M>> for InlineVec<T, N>
+where
+    T: PartialOrd<U>,
+{
+    fn partial_cmp(&self, other: &InlineVec<U, M>) -> Option<Ordering> {
+        self.iter().partial_cmp(other)
+    }
+}
+
+impl<T, const N: usize, U, const M: usize> PartialOrd<[U; M]> for InlineVec<T, N>
+where
+    T: PartialOrd<U>,
+{
+    fn partial_cmp(&self, other: &[U; M]) -> Option<Ordering> {
+        self.iter().partial_cmp(other)
+    }
+}
+
+impl<T, const N: usize, U> PartialOrd<[U]> for InlineVec<T, N>
+where
+    T: PartialOrd<U>,
+{
+    fn partial_cmp(&self, other: &[U]) -> Option<Ordering> {
+        self.iter().partial_cmp(other)
+    }
+}
+
+impl<T, const N: usize> Ord for InlineVec<T, N>
+where
+    T: Ord,
+{
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.iter().cmp(other)
+    }
+}
+
 impl<T, const N: usize, U, const M: usize> PartialEq<InlineVec<U, M>> for InlineVec<T, N>
 where
     T: PartialEq<U>,
 {
     fn eq(&self, other: &InlineVec<U, M>) -> bool {
-        self.as_slice() == other.as_slice()
+        self.as_slice().eq(other.as_slice())
+    }
+}
+
+impl<T, const N: usize, U, const M: usize> PartialEq<[U; M]> for InlineVec<T, N>
+where
+    T: PartialEq<U>,
+{
+    fn eq(&self, other: &[U; M]) -> bool {
+        self.as_slice().eq(other)
+    }
+}
+
+impl<T, const N: usize, U> PartialEq<[U]> for InlineVec<T, N>
+where
+    T: PartialEq<U>,
+{
+    fn eq(&self, other: &[U]) -> bool {
+        self.as_slice().eq(other)
     }
 }
 
@@ -330,6 +386,18 @@ impl<T, const N: usize> AsRef<[T]> for InlineVec<T, N> {
 
 impl<T, const N: usize> AsMut<[T]> for InlineVec<T, N> {
     fn as_mut(&mut self) -> &mut [T] {
+        self.as_mut_slice()
+    }
+}
+
+impl<T, const N: usize> Borrow<[T]> for InlineVec<T, N> {
+    fn borrow(&self) -> &[T] {
+        self.as_slice()
+    }
+}
+
+impl<T, const N: usize> BorrowMut<[T]> for InlineVec<T, N> {
+    fn borrow_mut(&mut self) -> &mut [T] {
         self.as_mut_slice()
     }
 }
