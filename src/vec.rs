@@ -34,6 +34,10 @@ impl<T, const N: usize> InlineVec<T, N> {
         self.len == 0
     }
 
+    pub const fn is_full(&self) -> bool {
+        self.len == N
+    }
+
     pub const fn as_ptr(&self) -> *const T {
         self.buf.as_ptr().cast()
     }
