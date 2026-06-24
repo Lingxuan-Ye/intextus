@@ -1,0 +1,340 @@
+mod iter;
+
+pub use self::iter::IntoIter;
+
+use crate::buf::Buf;
+use core::fmt;
+use core::hash::{Hash, Hasher};
+use core::mem::MaybeUninit;
+use core::ops::{Deref, DerefMut, Index, IndexMut};
+use core::slice;
+use core::slice::SliceIndex;
+
+pub struct InlineVec<T, const N: usize> {
+    len: usize,
+    buf: Buf<T, N>,
+}
+
+impl<T, const N: usize> InlineVec<T, N> {
+    pub const fn new() -> Self {
+        let len = 0;
+        let buf = Buf::new();
+        Self { len, buf }
+    }
+
+    pub const fn capacity(&self) -> usize {
+        N
+    }
+
+    pub const fn len(&self) -> usize {
+        self.len
+    }
+
+    pub const fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    pub const fn as_ptr(&self) -> *const T {
+        self.buf.as_ptr().cast()
+    }
+
+    pub const fn as_mut_ptr(&mut self) -> *mut T {
+        self.buf.as_mut_ptr().cast()
+    }
+
+    pub const fn as_slice(&self) -> &[T] {
+        let base = self.as_ptr();
+        unsafe { slice::from_raw_parts(base, self.len) }
+    }
+
+    pub const fn as_mut_slice(&mut self) -> &mut [T] {
+        let base = self.as_mut_ptr();
+        unsafe { slice::from_raw_parts_mut(base, self.len) }
+    }
+
+    #[allow(clippy::missing_safety_doc)]
+    pub const unsafe fn set_len(&mut self, len: usize) {
+        self.len = len;
+    }
+
+    pub fn push(&mut self, value: T) -> Option<()> {
+        self.push_mut(value).map(|_| ())
+    }
+
+    pub fn push_mut(&mut self, value: T) -> Option<&mut T> {
+        if self.len == N {
+            return None;
+        }
+        let index = self.len;
+        let slot = unsafe { self.buf.write(index, value) };
+        self.len += 1;
+        Some(slot)
+    }
+
+    pub fn pop(&mut self) -> Option<T> {
+        if self.len == 0 {
+            return None;
+        }
+        self.len -= 1;
+        let index = self.len;
+        let value = unsafe { self.buf.assume_init_read(index) };
+        Some(value)
+    }
+
+    pub fn pop_if<F>(&mut self, predicate: F) -> Option<T>
+    where
+        F: FnOnce(&mut T) -> bool,
+    {
+        let last = self.last_mut()?;
+        if !predicate(last) {
+            return None;
+        }
+        self.len -= 1;
+        let index = self.len;
+        let value = unsafe { self.buf.assume_init_read(index) };
+        Some(value)
+    }
+
+    pub fn insert(&mut self, index: usize, value: T) -> Option<()> {
+        self.insert_mut(index, value).map(|_| ())
+    }
+
+    pub fn insert_mut(&mut self, index: usize, value: T) -> Option<&mut T> {
+        if index > self.len || self.len == N {
+            return None;
+        }
+        if index < self.len {
+            let src = index;
+            let dst = index + 1;
+            let count = self.len - src;
+            unsafe {
+                self.buf.copy_within(src, dst, count);
+            }
+        }
+        let slot = unsafe { self.buf.write(index, value) };
+        self.len += 1;
+        Some(slot)
+    }
+
+    pub fn remove(&mut self, index: usize) -> Option<T> {
+        if index >= self.len {
+            return None;
+        }
+        self.len -= 1;
+        let value = unsafe { self.buf.assume_init_read(index) };
+        if index < self.len {
+            let src = index + 1;
+            let dst = index;
+            let count = self.len - dst;
+            unsafe {
+                self.buf.copy_within(src, dst, count);
+            }
+        }
+        Some(value)
+    }
+
+    pub fn swap_remove(&mut self, index: usize) -> Option<T> {
+        if index >= self.len {
+            return None;
+        }
+        self.len -= 1;
+        let value = unsafe { self.buf.assume_init_read(index) };
+        if index < self.len {
+            let src = self.len;
+            let dst = index;
+            unsafe {
+                self.buf.copy_within(src, dst, 1);
+            }
+        }
+        Some(value)
+    }
+
+    pub fn resize(&mut self, len: usize, value: T) -> Option<()>
+    where
+        T: Clone,
+    {
+        if len > N {
+            return None;
+        }
+        if len > self.len {
+            let last = len - 1;
+            for index in self.len..last {
+                let value = value.clone();
+                unsafe {
+                    self.buf.write(index, value);
+                }
+                self.len += 1;
+            }
+            unsafe {
+                self.buf.write(last, value);
+            }
+            self.len += 1;
+        } else {
+            let to_drop = len..self.len;
+            self.len = len;
+            unsafe {
+                self.buf.partial_drop(to_drop);
+            }
+        }
+        Some(())
+    }
+
+    pub fn resize_with<F>(&mut self, len: usize, mut f: F) -> Option<()>
+    where
+        F: FnMut(usize) -> T,
+    {
+        if len > N {
+            return None;
+        }
+        if len > self.len {
+            for index in self.len..len {
+                let value = f(index);
+                unsafe {
+                    self.buf.write(index, value);
+                }
+                self.len += 1;
+            }
+        } else {
+            let to_drop = len..self.len;
+            self.len = len;
+            unsafe {
+                self.buf.partial_drop(to_drop);
+            }
+        }
+        Some(())
+    }
+
+    pub fn truncate(&mut self, len: usize) {
+        if len > self.len {
+            return;
+        }
+        let to_drop = len..self.len;
+        self.len = len;
+        unsafe {
+            self.buf.partial_drop(to_drop);
+        }
+    }
+
+    pub fn spare_capacity_mut(&mut self) -> &mut [MaybeUninit<T>] {
+        unsafe { self.buf.get_unchecked_mut(self.len..N) }
+    }
+
+    pub fn clear(&mut self) {
+        let to_drop = ..self.len;
+        self.len = 0;
+        unsafe {
+            self.buf.partial_drop(to_drop);
+        }
+    }
+}
+
+impl<T, const N: usize> fmt::Debug for InlineVec<T, N>
+where
+    T: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_list().entries(self.as_slice()).finish()
+    }
+}
+
+impl<T, const N: usize> Default for InlineVec<T, N> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<T, const N: usize> Clone for InlineVec<T, N>
+where
+    T: Clone,
+{
+    fn clone(&self) -> Self {
+        let mut vec = Self::new();
+        for value in self {
+            let index = vec.len;
+            let value = value.clone();
+            unsafe {
+                vec.buf.write(index, value);
+            }
+            vec.len += 1;
+        }
+        vec
+    }
+}
+
+impl<T, const N: usize, I> Index<I> for InlineVec<T, N>
+where
+    I: SliceIndex<[T]>,
+{
+    type Output = I::Output;
+
+    fn index(&self, index: I) -> &Self::Output {
+        self.as_slice().index(index)
+    }
+}
+
+impl<T, const N: usize, I> IndexMut<I> for InlineVec<T, N>
+where
+    I: SliceIndex<[T]>,
+{
+    fn index_mut(&mut self, index: I) -> &mut Self::Output {
+        self.as_mut_slice().index_mut(index)
+    }
+}
+
+impl<T, const N: usize, U, const M: usize> PartialEq<InlineVec<U, M>> for InlineVec<T, N>
+where
+    T: PartialEq<U>,
+{
+    fn eq(&self, other: &InlineVec<U, M>) -> bool {
+        self.as_slice() == other.as_slice()
+    }
+}
+
+impl<T, const N: usize> Eq for InlineVec<T, N> where T: Eq {}
+
+impl<T, const N: usize> Hash for InlineVec<T, N>
+where
+    T: Hash,
+{
+    fn hash<H>(&self, state: &mut H)
+    where
+        H: Hasher,
+    {
+        self.as_slice().hash(state);
+    }
+}
+
+impl<T, const N: usize> Deref for InlineVec<T, N> {
+    type Target = [T];
+
+    fn deref(&self) -> &Self::Target {
+        self.as_slice()
+    }
+}
+
+impl<T, const N: usize> DerefMut for InlineVec<T, N> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.as_mut_slice()
+    }
+}
+
+impl<T, const N: usize> AsRef<[T]> for InlineVec<T, N> {
+    fn as_ref(&self) -> &[T] {
+        self.as_slice()
+    }
+}
+
+impl<T, const N: usize> AsMut<[T]> for InlineVec<T, N> {
+    fn as_mut(&mut self) -> &mut [T] {
+        self.as_mut_slice()
+    }
+}
+
+impl<T, const N: usize> Drop for InlineVec<T, N> {
+    fn drop(&mut self) {
+        let to_drop = ..self.len;
+        unsafe {
+            self.buf.partial_drop(to_drop);
+        }
+    }
+}
