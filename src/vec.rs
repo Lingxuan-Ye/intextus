@@ -41,11 +41,11 @@ impl<T, const N: usize> InlineVec<T, N> {
     }
 
     pub const fn as_ptr(&self) -> *const T {
-        self.buf.as_ptr().cast()
+        self.buf.as_ptr()
     }
 
     pub const fn as_mut_ptr(&mut self) -> *mut T {
-        self.buf.as_mut_ptr().cast()
+        self.buf.as_mut_ptr()
     }
 
     pub const fn as_slice(&self) -> &[T] {

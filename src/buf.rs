@@ -10,12 +10,12 @@ impl<T, const N: usize> Buf<T, N> {
         Self([const { MaybeUninit::uninit() }; N])
     }
 
-    pub(crate) const fn as_ptr(&self) -> *const MaybeUninit<T> {
-        self.0.as_ptr()
+    pub(crate) const fn as_ptr(&self) -> *const T {
+        self.0.as_ptr().cast()
     }
 
-    pub(crate) const fn as_mut_ptr(&mut self) -> *mut MaybeUninit<T> {
-        self.0.as_mut_ptr()
+    pub(crate) const fn as_mut_ptr(&mut self) -> *mut T {
+        self.0.as_mut_ptr().cast()
     }
 
     pub(crate) const fn as_uninit_array(&self) -> &[MaybeUninit<T>; N] {
