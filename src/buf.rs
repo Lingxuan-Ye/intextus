@@ -30,6 +30,14 @@ impl<T, const N: usize> Buf<T, N> {
         unsafe { self.get_unchecked(index).assume_init_ref().clone() }
     }
 
+    pub(crate) unsafe fn assume_init_ref(&self, index: usize) -> &T {
+        unsafe { self.get_unchecked(index).assume_init_ref() }
+    }
+
+    pub(crate) unsafe fn assume_init_mut(&mut self, index: usize) -> &mut T {
+        unsafe { self.get_unchecked_mut(index).assume_init_mut() }
+    }
+
     pub(crate) unsafe fn assume_init_read(&self, index: usize) -> T {
         unsafe { self.get_unchecked(index).assume_init_read() }
     }
