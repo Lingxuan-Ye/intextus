@@ -135,7 +135,7 @@ impl<T, const N: usize> Iterator for IntoIter<T, N> {
             let to_drop = self.alive();
             unsafe {
                 *self.start_mut() = self.end();
-                self.buf_mut().partial_drop(to_drop);
+                self.buf_mut().assume_init_drop(to_drop);
             }
             return None;
         }
@@ -143,7 +143,7 @@ impl<T, const N: usize> Iterator for IntoIter<T, N> {
         let to_drop = self.start()..index;
         unsafe {
             *self.start_mut() = index + 1;
-            self.buf_mut().partial_drop(to_drop);
+            self.buf_mut().assume_init_drop(to_drop);
         }
         let value = unsafe { self.buf().assume_init_read(index) };
         Some(value)
@@ -194,7 +194,7 @@ impl<T, const N: usize> DoubleEndedIterator for IntoIter<T, N> {
             let to_drop = self.alive();
             unsafe {
                 *self.end_mut() = self.start();
-                self.buf_mut().partial_drop(to_drop);
+                self.buf_mut().assume_init_drop(to_drop);
             }
             return None;
         }
@@ -202,7 +202,7 @@ impl<T, const N: usize> DoubleEndedIterator for IntoIter<T, N> {
         let index = to_drop.start - 1;
         unsafe {
             *self.end_mut() = index;
-            self.buf_mut().partial_drop(to_drop);
+            self.buf_mut().assume_init_drop(to_drop);
         }
         let value = unsafe { self.buf().assume_init_read(index) };
         Some(value)
@@ -231,7 +231,7 @@ impl<T, const N: usize> Drop for IntoIter<T, N> {
     fn drop(&mut self) {
         let to_drop = self.alive();
         unsafe {
-            self.buf_mut().partial_drop(to_drop);
+            self.buf_mut().assume_init_drop(to_drop);
         }
     }
 }

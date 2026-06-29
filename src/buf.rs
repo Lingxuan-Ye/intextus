@@ -43,7 +43,7 @@ impl<T, const N: usize> Buf<T, N> {
         }
     }
 
-    pub(crate) unsafe fn partial_drop<I>(&mut self, index: I)
+    pub(crate) unsafe fn assume_init_drop<I>(&mut self, index: I)
     where
         I: SliceIndex<[MaybeUninit<T>], Output = [MaybeUninit<T>]>,
     {

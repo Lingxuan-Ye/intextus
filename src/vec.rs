@@ -179,7 +179,7 @@ impl<T, const N: usize> InlineVec<T, N> {
             let to_drop = len..self.len;
             self.len = len;
             unsafe {
-                self.buf.partial_drop(to_drop);
+                self.buf.assume_init_drop(to_drop);
             }
         }
         Some(())
@@ -204,7 +204,7 @@ impl<T, const N: usize> InlineVec<T, N> {
             let to_drop = len..self.len;
             self.len = len;
             unsafe {
-                self.buf.partial_drop(to_drop);
+                self.buf.assume_init_drop(to_drop);
             }
         }
         Some(())
@@ -217,7 +217,7 @@ impl<T, const N: usize> InlineVec<T, N> {
         let to_drop = len..self.len;
         self.len = len;
         unsafe {
-            self.buf.partial_drop(to_drop);
+            self.buf.assume_init_drop(to_drop);
         }
     }
 
@@ -229,7 +229,7 @@ impl<T, const N: usize> InlineVec<T, N> {
         let to_drop = ..self.len;
         self.len = 0;
         unsafe {
-            self.buf.partial_drop(to_drop);
+            self.buf.assume_init_drop(to_drop);
         }
     }
 }
@@ -406,7 +406,7 @@ impl<T, const N: usize> Drop for InlineVec<T, N> {
     fn drop(&mut self) {
         let to_drop = ..self.len;
         unsafe {
-            self.buf.partial_drop(to_drop);
+            self.buf.assume_init_drop(to_drop);
         }
     }
 }
