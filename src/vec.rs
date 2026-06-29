@@ -155,6 +155,16 @@ impl<T, const N: usize> InlineVec<T, N> {
         Some(value)
     }
 
+    pub const fn swap(&mut self, i: usize, j: usize) -> Option<()> {
+        if i >= self.len || j >= self.len {
+            return None;
+        }
+        unsafe {
+            self.buf.swap(i, j);
+        }
+        Some(())
+    }
+
     pub fn resize(&mut self, len: usize, value: T) -> Option<()>
     where
         T: Clone,

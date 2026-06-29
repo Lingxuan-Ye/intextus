@@ -30,6 +30,15 @@ impl<T, const N: usize> Buf<T, N> {
         unsafe { self.0.get_unchecked_mut(index).write(value) }
     }
 
+    pub(crate) const unsafe fn swap(&mut self, i: usize, j: usize) {
+        let base = self.as_mut_ptr();
+        unsafe {
+            let x = base.add(i);
+            let y = base.add(j);
+            ptr::swap(x, y);
+        }
+    }
+
     pub(crate) const unsafe fn copy_within(&mut self, src: usize, dst: usize, count: usize) {
         let base = self.as_mut_ptr();
         unsafe {
