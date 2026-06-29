@@ -97,13 +97,8 @@ where
     T: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let slice = unsafe {
-            self.buf()
-                .as_uninit_array()
-                .get_unchecked(self.alive())
-                .assume_init_ref()
-        };
-        f.debug_list().entries(slice).finish()
+        let slice = self.as_slice();
+        f.debug_tuple("IntoIter").field(&slice).finish()
     }
 }
 
