@@ -97,7 +97,7 @@ where
         while iter.end() != self.end() {
             let index = iter.end();
             unsafe {
-                let value = self.buf().assume_init_clone(index);
+                let value = self.buf().assume_init_ref(index).clone();
                 iter.buf_mut().write(index, value);
                 *iter.end_mut() += 1;
             }

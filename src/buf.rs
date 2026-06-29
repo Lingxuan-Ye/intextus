@@ -23,13 +23,6 @@ impl<T, const N: usize> Buf<T, N> {
         unsafe { self.get_unchecked_mut(index).write(value) }
     }
 
-    pub(crate) unsafe fn assume_init_clone(&self, index: usize) -> T
-    where
-        T: Clone,
-    {
-        unsafe { self.get_unchecked(index).assume_init_ref().clone() }
-    }
-
     pub(crate) unsafe fn assume_init_ref(&self, index: usize) -> &T {
         unsafe { self.get_unchecked(index).assume_init_ref() }
     }
