@@ -30,6 +30,15 @@ impl<T, const N: usize> Buf<T, N> {
         unsafe { self.0.get_unchecked_mut(index).write(value) }
     }
 
+    pub(crate) const unsafe fn copy_within(&mut self, src: usize, dst: usize, count: usize) {
+        let base = self.as_mut_ptr();
+        unsafe {
+            let src = base.add(src);
+            let dst = base.add(dst);
+            ptr::copy(src, dst, count);
+        }
+    }
+
     pub(crate) unsafe fn assume_init_ref(&self, index: usize) -> &T {
         unsafe { self.0.get_unchecked(index).assume_init_ref() }
     }
@@ -40,15 +49,6 @@ impl<T, const N: usize> Buf<T, N> {
 
     pub(crate) unsafe fn assume_init_read(&self, index: usize) -> T {
         unsafe { self.0.get_unchecked(index).assume_init_read() }
-    }
-
-    pub(crate) unsafe fn copy_within(&mut self, src: usize, dst: usize, count: usize) {
-        let base = self.as_mut_ptr();
-        unsafe {
-            let src = base.add(src);
-            let dst = base.add(dst);
-            ptr::copy(src, dst, count);
-        }
     }
 
     pub(crate) unsafe fn assume_init_drop<I>(&mut self, index: I)
