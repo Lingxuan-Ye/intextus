@@ -39,6 +39,20 @@ impl<T, const N: usize> Buf<T, N> {
         }
     }
 
+    pub(crate) const unsafe fn copy_within_nonoverlapping(
+        &mut self,
+        src: usize,
+        dst: usize,
+        count: usize,
+    ) {
+        let base = self.as_mut_ptr();
+        unsafe {
+            let src = base.add(src);
+            let dst = base.add(dst);
+            ptr::copy_nonoverlapping(src, dst, count);
+        }
+    }
+
     pub(crate) unsafe fn assume_init_ref(&self, index: usize) -> &T {
         unsafe { self.0.get_unchecked(index).assume_init_ref() }
     }

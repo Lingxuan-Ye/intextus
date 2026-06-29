@@ -149,7 +149,7 @@ impl<T, const N: usize> InlineVec<T, N> {
             let src = self.len;
             let dst = index;
             unsafe {
-                self.buf.copy_within(src, dst, 1);
+                self.buf.copy_within_nonoverlapping(src, dst, 1);
             }
         }
         Some(value)
