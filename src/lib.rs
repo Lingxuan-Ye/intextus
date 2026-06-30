@@ -1,3 +1,4 @@
+#![allow(clippy::missing_safety_doc)]
 #![no_std]
 
 pub mod vec;

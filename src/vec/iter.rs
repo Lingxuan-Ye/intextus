@@ -109,20 +109,19 @@ where
     fn clone(&self) -> Self {
         let start = 0;
         let end_and_buf = ManuallyDrop::new(InlineVec::new());
-        let mut iter = Self { start, end_and_buf };
+        let mut other = Self { start, end_and_buf };
         unsafe {
-            *iter.start_mut() = self.start();
-            *iter.end_mut() = self.start();
+            *other.start_mut() = self.start();
+            *other.end_mut() = self.start();
         }
-        while iter.end() != self.end() {
-            let index = iter.end();
+        for index in self.alive() {
             unsafe {
                 let value = self.buf().assume_init_ref(index).clone();
-                iter.buf_mut().write(index, value);
-                *iter.end_mut() += 1;
+                other.buf_mut().write(index, value);
+                *other.end_mut() += 1;
             }
         }
-        iter
+        other
     }
 }
 
@@ -136,9 +135,8 @@ impl<T, const N: usize> Iterator for IntoIter<T, N> {
         let index = self.start();
         unsafe {
             *self.start_mut() += 1;
+            Some(self.buf().assume_init_read(index))
         }
-        let value = unsafe { self.buf().assume_init_read(index) };
-        Some(value)
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -164,9 +162,8 @@ impl<T, const N: usize> Iterator for IntoIter<T, N> {
         unsafe {
             *self.start_mut() = index + 1;
             self.buf_mut().assume_init_drop(to_drop);
+            Some(self.buf().assume_init_read(index))
         }
-        let value = unsafe { self.buf().assume_init_read(index) };
-        Some(value)
     }
 
     fn last(mut self) -> Option<Self::Item> {
@@ -177,16 +174,15 @@ impl<T, const N: usize> Iterator for IntoIter<T, N> {
     where
         F: FnMut(B, Self::Item) -> B,
     {
-        let mut acc = init;
-        while self.start() != self.end() {
-            let index = self.start();
+        let mut accum = init;
+        for index in self.alive() {
             unsafe {
                 *self.start_mut() += 1;
+                let value = self.buf().assume_init_read(index);
+                accum = f(accum, value);
             }
-            let value = unsafe { self.buf().assume_init_read(index) };
-            acc = f(acc, value);
         }
-        acc
+        accum
     }
 }
 
@@ -205,8 +201,7 @@ impl<T, const N: usize> DoubleEndedIterator for IntoIter<T, N> {
             *self.end_mut() -= 1;
         }
         let index = self.end();
-        let value = unsafe { self.buf().assume_init_read(index) };
-        Some(value)
+        unsafe { Some(self.buf().assume_init_read(index)) }
     }
 
     fn nth_back(&mut self, n: usize) -> Option<Self::Item> {
@@ -223,25 +218,23 @@ impl<T, const N: usize> DoubleEndedIterator for IntoIter<T, N> {
         unsafe {
             *self.end_mut() = index;
             self.buf_mut().assume_init_drop(to_drop);
+            Some(self.buf().assume_init_read(index))
         }
-        let value = unsafe { self.buf().assume_init_read(index) };
-        Some(value)
     }
 
     fn rfold<B, F>(mut self, init: B, mut f: F) -> B
     where
         F: FnMut(B, Self::Item) -> B,
     {
-        let mut acc = init;
-        while self.start() != self.end() {
+        let mut accum = init;
+        for index in self.alive().into_iter().rev() {
             unsafe {
                 *self.end_mut() -= 1;
+                let value = self.buf().assume_init_read(index);
+                accum = f(accum, value);
             }
-            let index = self.end();
-            let value = unsafe { self.buf().assume_init_read(index) };
-            acc = f(acc, value);
         }
-        acc
+        accum
     }
 }
 
