@@ -9,6 +9,7 @@ use core::fmt;
 use core::hash::{Hash, Hasher};
 use core::mem::MaybeUninit;
 use core::ops::{Deref, DerefMut, Index, IndexMut};
+use core::ptr;
 use core::slice;
 use core::slice::SliceIndex;
 
@@ -258,6 +259,24 @@ impl<T, const N: usize> InlineVec<T, N> {
         unsafe {
             self.buf.assume_init_drop(to_drop);
         }
+    }
+
+    pub fn split_off(&mut self, at: usize) -> Option<Self> {
+        if at > self.len {
+            return None;
+        }
+        let mut other = Self::new();
+        let dst_len = self.len - at;
+        self.len = at;
+        let src_base = self.as_ptr();
+        let dst_base = other.as_mut_ptr();
+        unsafe {
+            let src = src_base.add(at);
+            let dst = dst_base;
+            ptr::copy_nonoverlapping(src, dst, dst_len);
+        }
+        other.len = dst_len;
+        Some(other)
     }
 
     pub fn spare_capacity_mut(&mut self) -> &mut [MaybeUninit<T>] {
