@@ -165,6 +165,35 @@ impl<T, const N: usize> InlineVec<T, N> {
         Some(())
     }
 
+    pub fn extend<I>(&mut self, iter: I) -> I::IntoIter
+    where
+        I: IntoIterator<Item = T>,
+    {
+        let mut iter = iter.into_iter();
+        for (index, value) in (self.len..N).zip(&mut iter) {
+            unsafe {
+                self.buf.write(index, value);
+            }
+            self.len += 1;
+        }
+        iter
+    }
+
+    pub fn extend_from_slice<'a>(&mut self, slice: &'a [T]) -> &'a [T]
+    where
+        T: Clone,
+    {
+        let mut iter = slice.iter();
+        for (index, value) in (self.len..N).zip(&mut iter) {
+            let value = value.clone();
+            unsafe {
+                self.buf.write(index, value);
+            }
+            self.len += 1;
+        }
+        iter.as_slice()
+    }
+
     pub fn resize(&mut self, len: usize, value: T) -> Option<()>
     where
         T: Clone,
