@@ -6,7 +6,7 @@ use crate::buf::Buf;
 use core::cmp::Ordering;
 use core::fmt;
 use core::hash::{Hash, Hasher};
-use core::ops::{Index, IndexMut};
+use core::ops::{Bound, Index, IndexMut, RangeBounds};
 use core::ptr;
 use core::range::Range;
 use core::slice;
@@ -44,31 +44,27 @@ impl<T, const N: usize> InlineDeque<T, N> {
     }
 
     pub const fn as_slices(&self) -> (&[T], &[T]) {
+        let (prefix_span, suffix_span) = self.slice_spans();
         let base = self.buf.as_ptr();
-        let lens = self.slice_lens();
-        let prefix = unsafe {
-            let ptr = base.add(self.head);
-            slice::from_raw_parts(ptr, lens.0)
-        };
-        let suffix = unsafe {
-            let ptr = base;
-            slice::from_raw_parts(ptr, lens.1)
-        };
-        (prefix, suffix)
+        unsafe {
+            let prefix_ptr = base.add(prefix_span.start);
+            let prefix = slice::from_raw_parts(prefix_ptr, prefix_span.len);
+            let suffix_ptr = base.add(suffix_span.start);
+            let suffix = slice::from_raw_parts(suffix_ptr, suffix_span.len);
+            (prefix, suffix)
+        }
     }
 
     pub const fn as_mut_slices(&mut self) -> (&mut [T], &mut [T]) {
+        let (prefix_span, suffix_span) = self.slice_spans();
         let base = self.buf.as_mut_ptr();
-        let lens = self.slice_lens();
-        let prefix = unsafe {
-            let ptr = base.add(self.head);
-            slice::from_raw_parts_mut(ptr, lens.0)
-        };
-        let suffix = unsafe {
-            let ptr = base;
-            slice::from_raw_parts_mut(ptr, lens.1)
-        };
-        (prefix, suffix)
+        unsafe {
+            let prefix_ptr = base.add(prefix_span.start);
+            let prefix = slice::from_raw_parts_mut(prefix_ptr, prefix_span.len);
+            let suffix_ptr = base.add(suffix_span.start);
+            let suffix = slice::from_raw_parts_mut(suffix_ptr, suffix_span.len);
+            (prefix, suffix)
+        }
     }
 
     pub fn contains(&self, value: &T) -> bool
@@ -906,15 +902,6 @@ impl<T, const N: usize> Drop for InlineDeque<T, N> {
 }
 
 impl<T, const N: usize> InlineDeque<T, N> {
-    const fn slice_lens(&self) -> (usize, usize) {
-        let head_to_end = N - self.head;
-        if self.len <= head_to_end {
-            (self.len, 0)
-        } else {
-            (head_to_end, self.len - head_to_end)
-        }
-    }
-
     const fn slice_ranges(&self) -> (Range<usize>, Range<usize>) {
         let prefix;
         let suffix;
@@ -938,10 +925,85 @@ impl<T, const N: usize> InlineDeque<T, N> {
         (prefix, suffix)
     }
 
+    const fn slice_spans(&self) -> (Span, Span) {
+        let prefix;
+        let suffix;
+        let head_to_end = N - self.head;
+        if self.len <= head_to_end {
+            prefix = Span {
+                start: self.head,
+                len: self.len,
+            };
+            suffix = Span { start: 0, len: 0 };
+        } else {
+            prefix = Span {
+                start: self.head,
+                len: head_to_end,
+            };
+            suffix = Span {
+                start: 0,
+                len: self.len - head_to_end,
+            };
+        }
+        (prefix, suffix)
+    }
+
     /// The caller must ensure that:
     ///
     /// - `index <= N`.
     const fn physical_index(&self, index: usize) -> usize {
         Buf::<T, N>::wrap_add(self.head, index)
     }
+
+    fn physical_spans<R>(&self, range: R) -> Option<(Span, Span)>
+    where
+        R: RangeBounds<usize>,
+    {
+        let end = match range.end_bound() {
+            Bound::Included(&end) if end >= self.len => return None,
+            Bound::Included(&end) => end + 1,
+            Bound::Excluded(&end) if end > self.len => return None,
+            Bound::Excluded(&end) => end,
+            Bound::Unbounded => self.len,
+        };
+        let start = match range.start_bound() {
+            Bound::Included(&start) if start > end => return None,
+            Bound::Included(&start) => start,
+            Bound::Excluded(&start) if start >= end => return None,
+            Bound::Excluded(&start) => start + 1,
+            Bound::Unbounded => 0,
+        };
+        let range = start..end;
+        let head_to_end = N - self.head;
+        let prefix;
+        let suffix;
+        if end <= head_to_end {
+            prefix = Span {
+                start: self.head + range.start,
+                len: range.end - range.start,
+            };
+            suffix = Span { start: 0, len: 0 };
+        } else if start < head_to_end {
+            prefix = Span {
+                start: self.head + range.start,
+                len: head_to_end - range.start,
+            };
+            suffix = Span {
+                start: 0,
+                len: range.end - head_to_end,
+            };
+        } else {
+            prefix = Span { start: N, len: 0 };
+            suffix = Span {
+                start: range.start - head_to_end,
+                len: range.end - range.start,
+            };
+        }
+        Some((prefix, suffix))
+    }
+}
+
+struct Span {
+    start: usize,
+    len: usize,
 }

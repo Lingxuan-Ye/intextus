@@ -2,6 +2,7 @@ use super::InlineDeque;
 use core::fmt;
 use core::iter::FusedIterator;
 use core::mem;
+use core::ops::RangeBounds;
 use core::slice;
 
 impl<T, const N: usize> InlineDeque<T, N> {
@@ -17,6 +18,36 @@ impl<T, const N: usize> InlineDeque<T, N> {
         let prefix = prefix.iter_mut();
         let suffix = suffix.iter_mut();
         IterMut { prefix, suffix }
+    }
+
+    pub fn range<R>(&self, range: R) -> Option<Iter<'_, T>>
+    where
+        R: RangeBounds<usize>,
+    {
+        let (prefix_span, suffix_span) = self.physical_spans(range)?;
+        let base = self.buf.as_ptr();
+        unsafe {
+            let prefix_ptr = base.add(prefix_span.start);
+            let prefix = slice::from_raw_parts(prefix_ptr, prefix_span.len).iter();
+            let suffix_ptr = base.add(suffix_span.start);
+            let suffix = slice::from_raw_parts(suffix_ptr, suffix_span.len).iter();
+            Some(Iter { prefix, suffix })
+        }
+    }
+
+    pub fn range_mut<R>(&mut self, range: R) -> Option<IterMut<'_, T>>
+    where
+        R: RangeBounds<usize>,
+    {
+        let (prefix_span, suffix_span) = self.physical_spans(range)?;
+        let base = self.buf.as_mut_ptr();
+        unsafe {
+            let prefix_ptr = base.add(prefix_span.start);
+            let prefix = slice::from_raw_parts_mut(prefix_ptr, prefix_span.len).iter_mut();
+            let suffix_ptr = base.add(suffix_span.start);
+            let suffix = slice::from_raw_parts_mut(suffix_ptr, suffix_span.len).iter_mut();
+            Some(IterMut { prefix, suffix })
+        }
     }
 }
 
