@@ -3,6 +3,7 @@ mod iter;
 pub use self::iter::IntoIter;
 
 use crate::buf::Buf;
+use crate::deque::InlineDeque;
 use core::borrow::{Borrow, BorrowMut};
 use core::cmp::Ordering;
 use core::fmt;
@@ -359,6 +360,15 @@ where
     }
 }
 
+impl<T, const N: usize, U, const M: usize> PartialEq<InlineDeque<U, M>> for InlineVec<T, N>
+where
+    T: PartialEq<U>,
+{
+    fn eq(&self, other: &InlineDeque<U, M>) -> bool {
+        self.iter().eq(other)
+    }
+}
+
 impl<T, const N: usize, U, const M: usize> PartialEq<[U; M]> for InlineVec<T, N>
 where
     T: PartialEq<U>,
@@ -384,6 +394,15 @@ where
     T: PartialOrd<U>,
 {
     fn partial_cmp(&self, other: &InlineVec<U, M>) -> Option<Ordering> {
+        self.iter().partial_cmp(other)
+    }
+}
+
+impl<T, const N: usize, U, const M: usize> PartialOrd<InlineDeque<U, M>> for InlineVec<T, N>
+where
+    T: PartialOrd<U>,
+{
+    fn partial_cmp(&self, other: &InlineDeque<U, M>) -> Option<Ordering> {
         self.iter().partial_cmp(other)
     }
 }
