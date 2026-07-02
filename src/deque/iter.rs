@@ -102,8 +102,8 @@ where
 
 impl<T> Default for Iter<'_, T> {
     fn default() -> Self {
-        let prefix = Default::default();
-        let suffix = Default::default();
+        let prefix = slice::Iter::default();
+        let suffix = slice::Iter::default();
         Self { prefix, suffix }
     }
 }
@@ -156,7 +156,7 @@ impl<T> ExactSizeIterator for Iter<'_, T> {
     }
 }
 
-impl<'a, T> DoubleEndedIterator for Iter<'a, T> {
+impl<T> DoubleEndedIterator for Iter<'_, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
         if let Some(item) = self.suffix.next_back() {
             Some(item)
@@ -203,8 +203,8 @@ where
 
 impl<T> Default for IterMut<'_, T> {
     fn default() -> Self {
-        let prefix = Default::default();
-        let suffix = Default::default();
+        let prefix = slice::IterMut::default();
+        let suffix = slice::IterMut::default();
         Self { prefix, suffix }
     }
 }
@@ -249,7 +249,7 @@ impl<T> ExactSizeIterator for IterMut<'_, T> {
     }
 }
 
-impl<'a, T> DoubleEndedIterator for IterMut<'a, T> {
+impl<T> DoubleEndedIterator for IterMut<'_, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
         if let Some(item) = self.suffix.next_back() {
             Some(item)
