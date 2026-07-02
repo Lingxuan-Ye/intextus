@@ -4,13 +4,12 @@ mod iter;
 pub use self::iter::{IntoIter, Iter, IterMut};
 
 use crate::buf;
-use crate::buf::Buf;
+use crate::buf::{Buf, Span};
 use crate::vec::InlineVec;
 use core::cmp::Ordering;
 use core::fmt;
 use core::hash::{Hash, Hasher};
 use core::ops::{Bound, Index, IndexMut, RangeBounds};
-use core::range::Range;
 use core::slice;
 
 pub struct InlineDeque<T, const N: usize> {
@@ -559,7 +558,7 @@ impl<T, const N: usize> InlineDeque<T, N> {
             }
         } else if len < head_to_end {
             let prefix_to_drop = (self.head + len)..N;
-            let suffix_to_drop = ..(self.len - head_to_end);
+            let suffix_to_drop = 0..(self.len - head_to_end);
             self.len = len;
             unsafe {
                 self.buf.assume_init_drop(prefix_to_drop);
@@ -601,7 +600,7 @@ impl<T, const N: usize> InlineDeque<T, N> {
             self.head = drop_len - head_to_end;
             self.len = len;
             let prefix_to_drop = old_head..N;
-            let suffix_to_drop = ..self.head;
+            let suffix_to_drop = 0..self.head;
             unsafe {
                 self.buf.assume_init_drop(prefix_to_drop);
                 self.buf.assume_init_drop(suffix_to_drop);
@@ -649,9 +648,7 @@ impl<T, const N: usize> InlineDeque<T, N> {
     }
 
     pub fn clear(&mut self) {
-        let (prefix, suffix) = self.slice_spans();
-        let prefix_to_drop = Range::from(prefix);
-        let suffix_to_drop = Range::from(suffix);
+        let (prefix_to_drop, suffix_to_drop) = self.slice_spans();
         self.head = 0;
         self.len = 0;
         unsafe {
@@ -1003,19 +1000,5 @@ impl<T, const N: usize> InlineDeque<T, N> {
             };
         }
         Some((prefix, suffix))
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct Span {
-    pub(crate) start: usize,
-    pub(crate) len: usize,
-}
-
-impl From<Span> for Range<usize> {
-    fn from(value: Span) -> Self {
-        let start = value.start;
-        let end = value.start + value.len;
-        Range { start, end }
     }
 }

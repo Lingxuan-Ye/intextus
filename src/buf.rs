@@ -1,14 +1,15 @@
 use core::hint;
-use core::mem::MaybeUninit;
+use core::mem;
+use core::ops::Range as LegacyRange;
 use core::ptr;
-use core::slice::SliceIndex;
+use core::range::Range;
 
 #[derive(Debug)]
-pub(crate) struct Buf<T, const N: usize>([MaybeUninit<T>; N]);
+pub(crate) struct Buf<T, const N: usize>([mem::MaybeUninit<T>; N]);
 
 impl<T, const N: usize> Buf<T, N> {
     pub(crate) const fn new() -> Self {
-        Self([const { MaybeUninit::uninit() }; N])
+        Self([const { mem::MaybeUninit::uninit() }; N])
     }
 
     pub(crate) const fn as_ptr(&self) -> *const T {
@@ -19,19 +20,12 @@ impl<T, const N: usize> Buf<T, N> {
         self.0.as_mut_ptr().cast()
     }
 
-    pub(crate) const fn as_uninit_array(&self) -> &[MaybeUninit<T>; N] {
+    pub(crate) const fn as_uninit_array(&self) -> &[mem::MaybeUninit<T>; N] {
         &self.0
     }
 
-    pub(crate) const fn as_uninit_array_mut(&mut self) -> &mut [MaybeUninit<T>; N] {
+    pub(crate) const fn as_uninit_array_mut(&mut self) -> &mut [mem::MaybeUninit<T>; N] {
         &mut self.0
-    }
-
-    /// The caller must ensure that:
-    ///
-    /// - `index < N`.
-    pub(crate) unsafe fn write(&mut self, index: usize, value: T) -> &mut T {
-        unsafe { self.0.get_unchecked_mut(index).write(value) }
     }
 
     /// The caller must ensure that:
@@ -85,40 +79,91 @@ impl<T, const N: usize> Buf<T, N> {
         }
     }
 
-    /// The caller must ensure that:
-    ///
-    /// - `index < N`.
-    /// - The value at `index` is initialized and valid.
-    pub(crate) unsafe fn assume_init_ref(&self, index: usize) -> &T {
-        unsafe { self.0.get_unchecked(index).assume_init_ref() }
+    pub(crate) unsafe fn get_unchecked<I>(&self, index: I) -> &I::Output
+    where
+        I: BufIndex<T, N>,
+    {
+        unsafe { index.get_unchecked(self) }
+    }
+
+    pub(crate) unsafe fn get_unchecked_mut<I>(&mut self, index: I) -> &mut I::Output
+    where
+        I: BufIndex<T, N>,
+    {
+        unsafe { index.get_unchecked_mut(self) }
     }
 
     /// The caller must ensure that:
     ///
-    /// - `index < N`.
-    /// - The value at `index` is initialized and valid.
-    pub(crate) unsafe fn assume_init_mut(&mut self, index: usize) -> &mut T {
-        unsafe { self.0.get_unchecked_mut(index).assume_init_mut() }
+    /// - `index` is in bounds.
+    pub(crate) unsafe fn write<'a, I>(
+        &'a mut self,
+        index: I,
+        value: <I::Output as MaybeUninit>::Init,
+    ) -> &'a mut <I::Output as MaybeUninit>::Init
+    where
+        I: BufIndex<T, N>,
+        I::Output: MaybeUninitExt + 'a,
+    {
+        unsafe { self.get_unchecked_mut(index).write(value) }
     }
 
     /// The caller must ensure that:
     ///
-    /// - `index < N`.
+    /// - `index` is in bounds.
     /// - The value at `index` is initialized and valid.
-    pub(crate) unsafe fn assume_init_read(&self, index: usize) -> T {
-        unsafe { self.0.get_unchecked(index).assume_init_read() }
+    pub(crate) unsafe fn assume_init_read<'a, I>(
+        &'a self,
+        index: I,
+    ) -> <I::Output as MaybeUninit>::Init
+    where
+        I: BufIndex<T, N>,
+        I::Output: MaybeUninitExt + 'a,
+    {
+        unsafe { self.get_unchecked(index).assume_init_read() }
+    }
+
+    /// The caller must ensure that:
+    ///
+    /// - `index` is in bounds.
+    /// - The value at `index` is initialized and valid.
+    pub(crate) unsafe fn assume_init_ref<'a, I>(
+        &'a self,
+        index: I,
+    ) -> &'a <I::Output as MaybeUninit>::Init
+    where
+        I: BufIndex<T, N>,
+        I::Output: 'a,
+    {
+        unsafe { self.get_unchecked(index).assume_init_ref() }
+    }
+
+    /// The caller must ensure that:
+    ///
+    /// - `index` is in bounds.
+    /// - The value at `index` is initialized and valid.
+    pub(crate) unsafe fn assume_init_mut<'a, I>(
+        &'a mut self,
+        index: I,
+    ) -> &'a mut <I::Output as MaybeUninit>::Init
+    where
+        I: BufIndex<T, N>,
+        I::Output: 'a,
+    {
+        unsafe { self.get_unchecked_mut(index).assume_init_mut() }
     }
 
     /// The caller must ensure that:
     ///
     /// - `index` is in bounds.
     /// - The slice at `index` is initialized and valid.
-    pub(crate) unsafe fn assume_init_drop<I>(&mut self, index: I)
+    pub(crate) unsafe fn assume_init_drop<'a, I>(&'a mut self, index: I)
     where
-        I: SliceIndex<[MaybeUninit<T>], Output = [MaybeUninit<T>]>,
+        I: BufIndex<T, N>,
+        I::Output: 'a,
     {
         unsafe {
-            self.0.get_unchecked_mut(index).assume_init_drop();
+            self.get_unchecked_mut(index).assume_init_drop();
         }
     }
 }
@@ -428,5 +473,139 @@ pub(crate) const unsafe fn copy_nonoverlapping<T, const N: usize, const M: usize
         let src = src_base.add(src_index);
         let dst = dst_base.add(dst_index);
         ptr::copy_nonoverlapping(src, dst, count);
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct Span {
+    pub(crate) start: usize,
+    pub(crate) len: usize,
+}
+
+impl From<Span> for Range<usize> {
+    fn from(value: Span) -> Self {
+        let start = value.start;
+        let end = value.start + value.len;
+        Range { start, end }
+    }
+}
+
+pub(crate) trait BufIndex<T, const N: usize> {
+    type Output: MaybeUninit + ?Sized;
+
+    unsafe fn get_unchecked(self, buf: &Buf<T, N>) -> &Self::Output;
+
+    unsafe fn get_unchecked_mut(self, buf: &mut Buf<T, N>) -> &mut Self::Output;
+}
+
+impl<T, const N: usize> BufIndex<T, N> for usize {
+    type Output = mem::MaybeUninit<T>;
+
+    unsafe fn get_unchecked(self, buf: &Buf<T, N>) -> &Self::Output {
+        unsafe { buf.0.get_unchecked(self) }
+    }
+
+    unsafe fn get_unchecked_mut(self, buf: &mut Buf<T, N>) -> &mut Self::Output {
+        unsafe { buf.0.get_unchecked_mut(self) }
+    }
+}
+
+impl<T, const N: usize> BufIndex<T, N> for Span {
+    type Output = [mem::MaybeUninit<T>];
+
+    unsafe fn get_unchecked(self, buf: &Buf<T, N>) -> &Self::Output {
+        let range = Range::from(self);
+        unsafe { buf.0.get_unchecked(range) }
+    }
+
+    unsafe fn get_unchecked_mut(self, buf: &mut Buf<T, N>) -> &mut Self::Output {
+        let range = Range::from(self);
+        unsafe { buf.0.get_unchecked_mut(range) }
+    }
+}
+
+impl<T, const N: usize> BufIndex<T, N> for Range<usize> {
+    type Output = [mem::MaybeUninit<T>];
+
+    unsafe fn get_unchecked(self, buf: &Buf<T, N>) -> &Self::Output {
+        unsafe { buf.0.get_unchecked(self) }
+    }
+
+    unsafe fn get_unchecked_mut(self, buf: &mut Buf<T, N>) -> &mut Self::Output {
+        unsafe { buf.0.get_unchecked_mut(self) }
+    }
+}
+
+impl<T, const N: usize> BufIndex<T, N> for LegacyRange<usize> {
+    type Output = [mem::MaybeUninit<T>];
+
+    unsafe fn get_unchecked(self, buf: &Buf<T, N>) -> &Self::Output {
+        unsafe { buf.0.get_unchecked(self) }
+    }
+
+    unsafe fn get_unchecked_mut(self, buf: &mut Buf<T, N>) -> &mut Self::Output {
+        unsafe { buf.0.get_unchecked_mut(self) }
+    }
+}
+
+pub(crate) trait MaybeUninit {
+    type Init: ?Sized;
+
+    unsafe fn assume_init_ref(&self) -> &Self::Init;
+
+    unsafe fn assume_init_mut(&mut self) -> &mut Self::Init;
+
+    unsafe fn assume_init_drop(&mut self);
+}
+
+impl<T> MaybeUninit for mem::MaybeUninit<T> {
+    type Init = T;
+
+    unsafe fn assume_init_ref(&self) -> &Self::Init {
+        unsafe { self.assume_init_ref() }
+    }
+
+    unsafe fn assume_init_mut(&mut self) -> &mut Self::Init {
+        unsafe { self.assume_init_mut() }
+    }
+
+    unsafe fn assume_init_drop(&mut self) {
+        unsafe {
+            self.assume_init_drop();
+        }
+    }
+}
+
+impl<T> MaybeUninit for [mem::MaybeUninit<T>] {
+    type Init = [T];
+
+    unsafe fn assume_init_ref(&self) -> &Self::Init {
+        unsafe { self.assume_init_ref() }
+    }
+
+    unsafe fn assume_init_mut(&mut self) -> &mut Self::Init {
+        unsafe { self.assume_init_mut() }
+    }
+
+    unsafe fn assume_init_drop(&mut self) {
+        unsafe {
+            self.assume_init_drop();
+        }
+    }
+}
+
+pub(crate) trait MaybeUninitExt: MaybeUninit<Init: Sized> {
+    fn write(&mut self, value: Self::Init) -> &mut Self::Init;
+
+    unsafe fn assume_init_read(&self) -> Self::Init;
+}
+
+impl<T> MaybeUninitExt for mem::MaybeUninit<T> {
+    fn write(&mut self, value: Self::Init) -> &mut Self::Init {
+        self.write(value)
+    }
+
+    unsafe fn assume_init_read(&self) -> Self::Init {
+        unsafe { self.assume_init_read() }
     }
 }

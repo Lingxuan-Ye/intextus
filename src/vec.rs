@@ -261,7 +261,7 @@ impl<T, const N: usize> InlineVec<T, N> {
     }
 
     pub fn clear(&mut self) {
-        let to_drop = ..self.len;
+        let to_drop = 0..self.len;
         self.len = 0;
         unsafe {
             self.buf.assume_init_drop(to_drop);
