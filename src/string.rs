@@ -1,0 +1,332 @@
+use crate::buf::Buf;
+use crate::vec::InlineVec;
+use core::borrow::{Borrow, BorrowMut};
+use core::fmt;
+use core::ops::{Deref, DerefMut, Index, IndexMut};
+use core::slice::SliceIndex;
+
+mod convert;
+
+#[derive(Clone, Default, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct InlineString<const N: usize> {
+    vec: InlineVec<u8, N>,
+}
+
+impl<const N: usize> InlineString<N> {
+    pub const fn new() -> Self {
+        let vec = InlineVec::new();
+        Self { vec }
+    }
+
+    pub fn from_utf8(bytes: &[u8]) -> Option<Self> {
+        let Ok(string) = str::from_utf8(bytes) else {
+            return None;
+        };
+        let mut result = Self::new();
+        result.push_str(string)?;
+        Some(result)
+    }
+
+    pub const unsafe fn from_utf8_unchecked(bytes: InlineVec<u8, N>) -> Self {
+        Self { vec: bytes }
+    }
+
+    pub fn from_utf8_lossy(bytes: &[u8]) -> Option<Self> {
+        const REPLACEMENT: &str = "\u{FFFD}";
+        let mut result = Self::new();
+        for chunk in bytes.utf8_chunks() {
+            let valid = chunk.valid();
+            result.push_str(valid)?;
+            if !chunk.invalid().is_empty() {
+                result.push_str(REPLACEMENT)?;
+            }
+        }
+        Some(result)
+    }
+
+    pub fn from_utf16(bytes: &[u16]) -> Option<Self> {
+        let mut result = Self::new();
+        for char in char::decode_utf16(bytes.iter().cloned()) {
+            let char = char.ok()?;
+            result.push(char)?;
+        }
+        Some(result)
+    }
+
+    pub fn from_utf16_lossy(bytes: &[u16]) -> Option<Self> {
+        let mut result = Self::new();
+        for char in char::decode_utf16(bytes.iter().cloned()) {
+            let char = char.unwrap_or(char::REPLACEMENT_CHARACTER);
+            result.push(char)?;
+        }
+        Some(result)
+    }
+
+    pub const fn capacity(&self) -> usize {
+        N
+    }
+
+    pub const fn len(&self) -> usize {
+        self.vec.len()
+    }
+
+    pub const fn is_empty(&self) -> bool {
+        self.vec.is_empty()
+    }
+
+    pub const fn is_full(&self) -> bool {
+        self.vec.is_full()
+    }
+
+    pub const fn as_str(&self) -> &str {
+        let slice = self.vec.as_slice();
+        unsafe { str::from_utf8_unchecked(slice) }
+    }
+
+    pub const fn as_mut_str(&mut self) -> &mut str {
+        let slice = self.vec.as_mut_slice();
+        unsafe { str::from_utf8_unchecked_mut(slice) }
+    }
+
+    pub const fn as_bytes(&self) -> &[u8] {
+        self.vec.as_slice()
+    }
+
+    pub const unsafe fn as_mut_vec(&mut self) -> &mut InlineVec<u8, N> {
+        &mut self.vec
+    }
+
+    pub fn into_bytes(self) -> InlineVec<u8, N> {
+        self.vec
+    }
+
+    pub const fn push(&mut self, char: char) -> Option<()> {
+        let len = self.vec.len();
+        let char_len = char.len_utf8();
+        if char_len > N - len {
+            return None;
+        }
+        let mut buf = [0; char::MAX_LEN_UTF8];
+        char.encode_utf8(&mut buf);
+        unsafe {
+            self.vec
+                .as_mut_ptr()
+                .add(len)
+                .copy_from_nonoverlapping(buf.as_ptr(), char_len);
+            self.vec.set_len(len + char_len);
+        }
+        Some(())
+    }
+
+    pub const fn push_str(&mut self, string: &str) -> Option<()> {
+        let len = self.vec.len();
+        let string_len = string.len();
+        if string_len > N - len {
+            return None;
+        }
+        unsafe {
+            self.vec
+                .as_mut_ptr()
+                .add(len)
+                .copy_from_nonoverlapping(string.as_ptr(), string_len);
+            self.vec.set_len(len + string_len);
+        }
+        Some(())
+    }
+
+    pub fn pop(&mut self) -> Option<char> {
+        let char = self.as_str().chars().next_back()?;
+        let len = self.vec.len();
+        let char_len = char.len_utf8();
+        unsafe {
+            self.vec.set_len(len - char_len);
+        }
+        Some(char)
+    }
+
+    pub const fn insert(&mut self, index: usize, char: char) -> Option<()> {
+        if !self.as_str().is_char_boundary(index) {
+            return None;
+        }
+        let len = self.vec.len();
+        let char_len = char.len_utf8();
+        if char_len > N - len {
+            return None;
+        }
+        if index != len {
+            unsafe {
+                self.vec
+                    .buf_mut()
+                    .copy_within(index, index + char_len, len - index);
+            }
+        }
+        let mut buf = [0; char::MAX_LEN_UTF8];
+        char.encode_utf8(&mut buf);
+        unsafe {
+            self.vec
+                .as_mut_ptr()
+                .add(index)
+                .copy_from_nonoverlapping(buf.as_ptr(), char_len);
+            self.vec.set_len(len + char_len);
+        }
+        Some(())
+    }
+
+    pub const fn insert_str(&mut self, index: usize, string: &str) -> Option<()> {
+        if !self.as_str().is_char_boundary(index) {
+            return None;
+        }
+        let len = self.vec.len();
+        let string_len = string.len();
+        if string_len > N - len {
+            return None;
+        }
+        if index != len {
+            unsafe {
+                self.vec
+                    .buf_mut()
+                    .copy_within(index, index + string_len, len - index);
+            }
+        }
+        unsafe {
+            self.vec
+                .as_mut_ptr()
+                .add(index)
+                .copy_from_nonoverlapping(string.as_ptr(), string_len);
+            self.vec.set_len(len + string_len);
+        }
+        Some(())
+    }
+
+    pub fn remove(&mut self, index: usize) -> Option<char> {
+        let char = self.as_str().get(index..)?.chars().next()?;
+        let len = self.vec.len();
+        let char_len = char.len_utf8();
+        let new_len = len - char_len;
+        if index != new_len {
+            unsafe {
+                self.vec
+                    .buf_mut()
+                    .copy_within(index + char_len, index, new_len - index);
+            }
+        }
+        unsafe {
+            self.vec.set_len(new_len);
+        }
+        Some(char)
+    }
+
+    pub fn truncate(&mut self, len: usize) -> Option<()> {
+        if len > self.vec.len() {
+            return Some(());
+        }
+        if !self.as_str().is_char_boundary(len) {
+            return None;
+        }
+        self.vec.truncate(len);
+        Some(())
+    }
+
+    pub fn split_off(&mut self, at: usize) -> Option<Self> {
+        if !self.as_str().is_char_boundary(at) {
+            return None;
+        }
+        self.vec.split_off(at).map(|vec| Self { vec })
+    }
+
+    pub fn clear(&mut self) {
+        self.vec.clear();
+    }
+
+    pub(crate) const fn buf(&self) -> &Buf<u8, N> {
+        self.vec.buf()
+    }
+}
+
+impl<const N: usize> fmt::Debug for InlineString<N> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(self.as_str(), f)
+    }
+}
+
+impl<const N: usize> fmt::Display for InlineString<N> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self.as_str(), f)
+    }
+}
+
+impl<const N: usize> Deref for InlineString<N> {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        self.as_str()
+    }
+}
+
+impl<const N: usize> DerefMut for InlineString<N> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.as_mut_str()
+    }
+}
+
+impl<const N: usize> AsRef<str> for InlineString<N> {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl<const N: usize> AsRef<[u8]> for InlineString<N> {
+    fn as_ref(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+
+impl<const N: usize> AsMut<str> for InlineString<N> {
+    fn as_mut(&mut self) -> &mut str {
+        self.as_mut_str()
+    }
+}
+
+impl<const N: usize> Borrow<str> for InlineString<N> {
+    fn borrow(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl<const N: usize> BorrowMut<str> for InlineString<N> {
+    fn borrow_mut(&mut self) -> &mut str {
+        self.as_mut_str()
+    }
+}
+
+impl<const N: usize> PartialEq<str> for InlineString<N> {
+    fn eq(&self, other: &str) -> bool {
+        self.as_str().eq(other)
+    }
+}
+
+impl<const N: usize> PartialEq<InlineString<N>> for str {
+    fn eq(&self, other: &InlineString<N>) -> bool {
+        self.eq(other.as_str())
+    }
+}
+
+impl<const N: usize, I> Index<I> for InlineString<N>
+where
+    I: SliceIndex<str>,
+{
+    type Output = I::Output;
+
+    fn index(&self, index: I) -> &Self::Output {
+        self.as_str().index(index)
+    }
+}
+
+impl<const N: usize, I> IndexMut<I> for InlineString<N>
+where
+    I: SliceIndex<str>,
+{
+    fn index_mut(&mut self, index: I) -> &mut Self::Output {
+        self.as_mut_str().index_mut(index)
+    }
+}

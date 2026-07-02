@@ -2,6 +2,7 @@
 #![no_std]
 
 pub mod deque;
+pub mod string;
 pub mod vec;
 
 mod buf;
