@@ -257,7 +257,7 @@ impl<T, const N: usize> InlineVec<T, N> {
     }
 
     pub fn spare_capacity_mut(&mut self) -> &mut [MaybeUninit<T>] {
-        unsafe { self.buf.as_uninit_array_mut().get_unchecked_mut(self.len..) }
+        unsafe { self.buf.get_unchecked_mut(self.len..N) }
     }
 
     pub fn clear(&mut self) {

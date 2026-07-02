@@ -20,14 +20,6 @@ impl<T, const N: usize> Buf<T, N> {
         self.0.as_mut_ptr().cast()
     }
 
-    pub(crate) const fn as_uninit_array(&self) -> &[mem::MaybeUninit<T>; N] {
-        &self.0
-    }
-
-    pub(crate) const fn as_uninit_array_mut(&mut self) -> &mut [mem::MaybeUninit<T>; N] {
-        &mut self.0
-    }
-
     /// The caller must ensure that:
     ///
     /// - `i < N`.

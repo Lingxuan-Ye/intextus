@@ -43,22 +43,12 @@ pub struct IntoIter<T, const N: usize> {
 impl<T, const N: usize> IntoIter<T, N> {
     pub fn as_slice(&self) -> &[T] {
         let alive = self.alive();
-        unsafe {
-            self.buf()
-                .as_uninit_array()
-                .get_unchecked(alive)
-                .assume_init_ref()
-        }
+        unsafe { self.buf().assume_init_ref(alive) }
     }
 
     pub fn as_mut_slice(&mut self) -> &mut [T] {
         let alive = self.alive();
-        unsafe {
-            self.buf_mut()
-                .as_uninit_array_mut()
-                .get_unchecked_mut(alive)
-                .assume_init_mut()
-        }
+        unsafe { self.buf_mut().assume_init_mut(alive) }
     }
 
     fn alive(&self) -> Range<usize> {
