@@ -229,7 +229,7 @@ impl<T, const N: usize> InlineVec<T, N> {
     }
 
     pub fn truncate(&mut self, len: usize) {
-        if len > self.len {
+        if len >= self.len {
             return;
         }
         let to_drop = len..self.len;
