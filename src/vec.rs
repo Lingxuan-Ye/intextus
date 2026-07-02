@@ -239,7 +239,7 @@ impl<T, const N: usize> InlineVec<T, N> {
         }
     }
 
-    pub fn split_off(&mut self, at: usize) -> Option<Self> {
+    pub const fn split_off(&mut self, at: usize) -> Option<Self> {
         if at > self.len {
             return None;
         }
@@ -463,5 +463,9 @@ impl<T, const N: usize> Drop for InlineVec<T, N> {
 impl<T, const N: usize> InlineVec<T, N> {
     pub(crate) const fn buf(&self) -> &Buf<T, N> {
         &self.buf
+    }
+
+    pub(crate) const unsafe fn buf_mut(&mut self) -> &mut Buf<T, N> {
+        &mut self.buf
     }
 }

@@ -608,7 +608,7 @@ impl<T, const N: usize> InlineDeque<T, N> {
         }
     }
 
-    pub fn split_off(&mut self, at: usize) -> Option<Self> {
+    pub const fn split_off(&mut self, at: usize) -> Option<Self> {
         if at > self.len {
             return None;
         }
