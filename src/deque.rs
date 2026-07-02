@@ -577,17 +577,17 @@ impl<T, const N: usize> InlineDeque<T, N> {
         if len >= self.len {
             return;
         }
-        let removed = self.len - len;
+        let drop_len = self.len - len;
         let head_to_end = N - self.head;
-        if removed < head_to_end {
+        if drop_len < head_to_end {
             let old_head = self.head;
-            self.head += removed;
+            self.head += drop_len;
             self.len = len;
             let to_drop = old_head..self.head;
             unsafe {
                 self.buf.assume_init_drop(to_drop);
             }
-        } else if removed == head_to_end {
+        } else if drop_len == head_to_end {
             let old_head = self.head;
             self.head = 0;
             self.len = len;
@@ -597,7 +597,7 @@ impl<T, const N: usize> InlineDeque<T, N> {
             }
         } else {
             let old_head = self.head;
-            self.head = removed - head_to_end;
+            self.head = drop_len - head_to_end;
             self.len = len;
             let prefix_to_drop = old_head..N;
             let suffix_to_drop = ..self.head;
@@ -612,12 +612,12 @@ impl<T, const N: usize> InlineDeque<T, N> {
         if at > self.len {
             return None;
         }
-        let mut other = Self::new();
+        let mut result = Self::new();
         let dst_len = self.len - at;
         let src_len = self.len;
         self.len = at;
         let src_base = self.buf.as_ptr();
-        let dst_base = other.buf.as_mut_ptr();
+        let dst_base = result.buf.as_mut_ptr();
         let head_to_end = N - self.head;
         if src_len <= head_to_end {
             unsafe {
@@ -643,8 +643,8 @@ impl<T, const N: usize> InlineDeque<T, N> {
                 ptr::copy_nonoverlapping(src, dst, dst_len);
             }
         }
-        other.len = dst_len;
-        Some(other)
+        result.len = dst_len;
+        Some(result)
     }
 
     pub fn clear(&mut self) {
@@ -783,15 +783,15 @@ where
     T: Clone,
 {
     fn clone(&self) -> Self {
-        let mut other = Self::new();
+        let mut result = Self::new();
         for (index, value) in self.iter().enumerate() {
             let value = value.clone();
             unsafe {
-                other.buf.write(index, value);
+                result.buf.write(index, value);
             }
-            other.len += 1;
+            result.len += 1;
         }
-        other
+        result
     }
 }
 

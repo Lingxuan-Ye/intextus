@@ -242,18 +242,18 @@ impl<T, const N: usize> InlineVec<T, N> {
         if at > self.len {
             return None;
         }
-        let mut other = Self::new();
+        let mut result = Self::new();
         let dst_len = self.len - at;
         self.len = at;
         let src_base = self.as_ptr();
-        let dst_base = other.as_mut_ptr();
+        let dst_base = result.as_mut_ptr();
         unsafe {
             let src = src_base.add(at);
             let dst = dst_base;
             ptr::copy_nonoverlapping(src, dst, dst_len);
         }
-        other.len = dst_len;
-        Some(other)
+        result.len = dst_len;
+        Some(result)
     }
 
     pub fn spare_capacity_mut(&mut self) -> &mut [MaybeUninit<T>] {
@@ -289,15 +289,15 @@ where
     T: Clone,
 {
     fn clone(&self) -> Self {
-        let mut other = Self::new();
+        let mut result = Self::new();
         for (index, value) in self.iter().enumerate() {
             let value = value.clone();
             unsafe {
-                other.buf.write(index, value);
+                result.buf.write(index, value);
             }
-            other.len += 1;
+            result.len += 1;
         }
-        other
+        result
     }
 }
 

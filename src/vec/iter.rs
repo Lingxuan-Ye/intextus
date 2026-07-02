@@ -109,19 +109,19 @@ where
     fn clone(&self) -> Self {
         let start = 0;
         let end_and_buf = ManuallyDrop::new(InlineVec::new());
-        let mut other = Self { start, end_and_buf };
+        let mut result = Self { start, end_and_buf };
         unsafe {
-            *other.start_mut() = self.start();
-            *other.end_mut() = self.start();
+            *result.start_mut() = self.start();
+            *result.end_mut() = self.start();
         }
         for index in self.alive() {
             unsafe {
                 let value = self.buf().assume_init_ref(index).clone();
-                other.buf_mut().write(index, value);
-                *other.end_mut() += 1;
+                result.buf_mut().write(index, value);
+                *result.end_mut() += 1;
             }
         }
-        other
+        result
     }
 }
 
