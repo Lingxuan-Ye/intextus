@@ -1,7 +1,7 @@
 use super::InlineVec;
+use crate::buf;
 use crate::deque::InlineDeque;
 use core::mem::ManuallyDrop;
-use core::ptr;
 
 impl<T, const N: usize, const M: usize> TryFrom<InlineDeque<T, M>> for InlineVec<T, N> {
     type Error = InlineDeque<T, M>;
@@ -12,14 +12,17 @@ impl<T, const N: usize, const M: usize> TryFrom<InlineDeque<T, M>> for InlineVec
             return Err(value);
         }
         let value = ManuallyDrop::new(value);
-        let (prefix, suffix) = value.as_slices();
+        let (prefix, suffix) = value.slice_spans();
         let mut result = Self::new();
-        let dst_base = result.as_mut_ptr();
         unsafe {
-            let dst = dst_base;
-            ptr::copy_nonoverlapping(prefix.as_ptr(), dst, prefix.len());
-            let dst = dst_base.add(prefix.len());
-            ptr::copy_nonoverlapping(suffix.as_ptr(), dst, suffix.len());
+            let src_index = prefix.start;
+            let dst_index = 0;
+            let count = prefix.len;
+            buf::copy_nonoverlapping(value.buf(), &mut result.buf, src_index, dst_index, count);
+            let src_index = suffix.start;
+            let dst_index = prefix.len;
+            let count = suffix.len;
+            buf::copy_nonoverlapping(value.buf(), &mut result.buf, src_index, dst_index, count);
         }
         result.len = len;
         Ok(result)

@@ -3,13 +3,13 @@ mod iter;
 
 pub use self::iter::{IntoIter, Iter, IterMut};
 
+use crate::buf;
 use crate::buf::Buf;
 use crate::vec::InlineVec;
 use core::cmp::Ordering;
 use core::fmt;
 use core::hash::{Hash, Hasher};
 use core::ops::{Bound, Index, IndexMut, RangeBounds};
-use core::ptr;
 use core::range::Range;
 use core::slice;
 
@@ -614,34 +614,34 @@ impl<T, const N: usize> InlineDeque<T, N> {
             return None;
         }
         let mut result = Self::new();
-        let dst_len = self.len - at;
         let src_len = self.len;
+        let dst_len = self.len - at;
         self.len = at;
-        let src_base = self.buf.as_ptr();
-        let dst_base = result.buf.as_mut_ptr();
         let head_to_end = N - self.head;
         if src_len <= head_to_end {
             unsafe {
-                let src = src_base.add(self.head + at);
-                let dst = dst_base;
-                ptr::copy_nonoverlapping(src, dst, dst_len);
+                let src_index = self.head + at;
+                let dst_index = 0;
+                let count = dst_len;
+                buf::copy_nonoverlapping(&self.buf, &mut result.buf, src_index, dst_index, count);
             }
         } else if at < head_to_end {
             unsafe {
-                let src = src_base.add(self.head + at);
-                let dst = dst_base;
+                let src_index = self.head + at;
+                let dst_index = 0;
                 let count = head_to_end - at;
-                ptr::copy_nonoverlapping(src, dst, count);
-                let src = src_base;
-                let dst = dst_base.add(count);
+                buf::copy_nonoverlapping(&self.buf, &mut result.buf, src_index, dst_index, count);
+                let src_index = 0;
+                let dst_index = count;
                 let count = dst_len - count;
-                ptr::copy_nonoverlapping(src, dst, count);
+                buf::copy_nonoverlapping(&self.buf, &mut result.buf, src_index, dst_index, count);
             }
         } else {
             unsafe {
-                let src = src_base.add(at - head_to_end);
-                let dst = dst_base;
-                ptr::copy_nonoverlapping(src, dst, dst_len);
+                let src_index = at - head_to_end;
+                let dst_index = 0;
+                let count = dst_len;
+                buf::copy_nonoverlapping(&self.buf, &mut result.buf, src_index, dst_index, count);
             }
         }
         result.len = dst_len;
@@ -922,6 +922,33 @@ impl<T, const N: usize> Drop for InlineDeque<T, N> {
 }
 
 impl<T, const N: usize> InlineDeque<T, N> {
+    pub(crate) const fn buf(&self) -> &Buf<T, N> {
+        &self.buf
+    }
+
+    pub(crate) const fn slice_spans(&self) -> (Span, Span) {
+        let prefix;
+        let suffix;
+        let head_to_end = N - self.head;
+        if self.len <= head_to_end {
+            prefix = Span {
+                start: self.head,
+                len: self.len,
+            };
+            suffix = Span { start: 0, len: 0 };
+        } else {
+            prefix = Span {
+                start: self.head,
+                len: head_to_end,
+            };
+            suffix = Span {
+                start: 0,
+                len: self.len - head_to_end,
+            };
+        }
+        (prefix, suffix)
+    }
+
     const fn slice_ranges(&self) -> (Range<usize>, Range<usize>) {
         let prefix;
         let suffix;
@@ -940,29 +967,6 @@ impl<T, const N: usize> InlineDeque<T, N> {
             suffix = Range {
                 start: 0,
                 end: self.len - head_to_end,
-            };
-        }
-        (prefix, suffix)
-    }
-
-    const fn slice_spans(&self) -> (Span, Span) {
-        let prefix;
-        let suffix;
-        let head_to_end = N - self.head;
-        if self.len <= head_to_end {
-            prefix = Span {
-                start: self.head,
-                len: self.len,
-            };
-            suffix = Span { start: 0, len: 0 };
-        } else {
-            prefix = Span {
-                start: self.head,
-                len: head_to_end,
-            };
-            suffix = Span {
-                start: 0,
-                len: self.len - head_to_end,
             };
         }
         (prefix, suffix)
@@ -1023,7 +1027,7 @@ impl<T, const N: usize> InlineDeque<T, N> {
     }
 }
 
-struct Span {
-    start: usize,
-    len: usize,
+pub(crate) struct Span {
+    pub(crate) start: usize,
+    pub(crate) len: usize,
 }

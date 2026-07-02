@@ -49,32 +49,38 @@ impl<T, const N: usize> Buf<T, N> {
 
     /// The caller must ensure that:
     ///
-    /// - `src + count <= N`.
-    /// - `dst + count <= N`.
-    pub(crate) const unsafe fn copy_within(&mut self, src: usize, dst: usize, count: usize) {
+    /// - `src_index + count <= N`.
+    /// - `dst_index + count <= N`.
+    pub(crate) const unsafe fn copy_within(
+        &mut self,
+        src_index: usize,
+        dst_index: usize,
+        count: usize,
+    ) {
         let base = self.as_mut_ptr();
         unsafe {
-            let src = base.add(src);
-            let dst = base.add(dst);
+            let src = base.add(src_index);
+            let dst = base.add(dst_index);
             ptr::copy(src, dst, count);
         }
     }
 
     /// The caller must ensure that:
     ///
-    /// - `src + count <= N`.
-    /// - `dst + count <= N`.
-    /// - `src..(src + count)` must not overlap with `dst..(dst + count)`.
+    /// - `src_index + count <= N`.
+    /// - `dst_index + count <= N`.
+    /// - `src_index..(src_index + count)` and `dst_index..(dst_index + count)` must
+    ///   not overlap.
     pub(crate) const unsafe fn copy_within_nonoverlapping(
         &mut self,
-        src: usize,
-        dst: usize,
+        src_index: usize,
+        dst_index: usize,
         count: usize,
     ) {
         let base = self.as_mut_ptr();
         unsafe {
-            let src = base.add(src);
-            let dst = base.add(dst);
+            let src = base.add(src_index);
+            let dst = base.add(dst_index);
             ptr::copy_nonoverlapping(src, dst, count);
         }
     }
@@ -120,15 +126,20 @@ impl<T, const N: usize> Buf<T, N> {
 impl<T, const N: usize> Buf<T, N> {
     /// The caller must ensure that:
     ///
-    /// - `src < N`.
-    /// - `dst < N`.
+    /// - `src_index < N`.
+    /// - `dst_index < N`.
     /// - `count <= N`.
-    pub(crate) const unsafe fn wrap_copy_within(&mut self, src: usize, dst: usize, count: usize) {
-        if size_of::<T>() == 0 || src == dst || count == 0 {
+    pub(crate) const unsafe fn wrap_copy_within(
+        &mut self,
+        src_index: usize,
+        dst_index: usize,
+        count: usize,
+    ) {
+        if size_of::<T>() == 0 || src_index == dst_index || count == 0 {
             return;
         }
 
-        let src_to_dst = Self::wrap_sub(dst, src);
+        let src_to_dst = Self::wrap_sub(dst_index, src_index);
         let dst_to_src = N - src_to_dst;
 
         // In the diagrams below, `_` denotes an irrelevant value and does not imply
@@ -141,50 +152,52 @@ impl<T, const N: usize> Buf<T, N> {
             // 2 [H I J A B C D E F G] new
             //    . . . . . . D . . .
             let mut buf = Self::new();
-            let old = self.as_ptr();
-            let new = buf.as_mut_ptr();
             unsafe {
-                ptr::copy_nonoverlapping(old, new.add(src_to_dst), dst_to_src);
-                ptr::copy_nonoverlapping(old.add(dst_to_src), new, src_to_dst);
+                copy_nonoverlapping(self, &mut buf, 0, src_to_dst, dst_to_src);
+                copy_nonoverlapping(self, &mut buf, dst_to_src, 0, src_to_dst);
             }
             *self = buf;
             return;
         }
 
-        let src_to_end = N - src;
-        let dst_to_end = N - dst;
+        let src_to_end = N - src_index;
+        let dst_to_end = N - dst_index;
         let src_wraps = count > src_to_end;
         let dst_wraps = count > dst_to_end;
 
-        match (src < dst, src_wraps, dst_wraps) {
+        match (src_index < dst_index, src_wraps, dst_wraps) {
             (true, false, false) => unsafe {
-                match src_to_dst >= count {
+                match count <= src_to_dst {
                     true => {
                         //      S . . .
                         // 0 [_ A B C D _ _ _ _ _]
                         // 1 [_ A B C D A B C D _]
                         //              D . . .
-                        self.copy_within_nonoverlapping(src, dst, count);
+                        self.copy_within_nonoverlapping(src_index, dst_index, count);
                     }
                     false => {
                         //      S . . .
                         // 0 [_ A B C D _ _ _ _ _]
                         // 1 [_ A B C A B C D _ _]
                         //            D . . .
-                        self.copy_within(src, dst, count);
+                        self.copy_within(src_index, dst_index, count);
                     }
                 }
             },
             (true, false, true) => unsafe {
-                match (src_to_dst >= count, dst_to_src >= count) {
+                match (count <= src_to_dst, count <= dst_to_src) {
                     (true, true) => {
                         //      S . . .
                         // 0 [_ A B C D _ _ _ _ _]
                         // 1 [_ A B C D _ _ A B C]
                         // 2 [D A B C D _ _ A B C]
                         //    .             D . .
-                        self.copy_within_nonoverlapping(src, dst, dst_to_end);
-                        self.copy_within_nonoverlapping(src + dst_to_end, 0, count - dst_to_end);
+                        self.copy_within_nonoverlapping(src_index, dst_index, dst_to_end);
+                        self.copy_within_nonoverlapping(
+                            src_index + dst_to_end,
+                            0,
+                            count - dst_to_end,
+                        );
                     }
                     (true, false) => {
                         //      S . . .
@@ -192,8 +205,8 @@ impl<T, const N: usize> Buf<T, N> {
                         // 1 [_ A B C D _ _ _ _ A]
                         // 2 [B C D C D _ _ _ _ A]
                         //    . . .             D
-                        self.copy_within_nonoverlapping(src, dst, dst_to_end);
-                        self.copy_within(src + dst_to_end, 0, count - dst_to_end);
+                        self.copy_within_nonoverlapping(src_index, dst_index, dst_to_end);
+                        self.copy_within(src_index + dst_to_end, 0, count - dst_to_end);
                     }
                     (false, true) => {
                         //              S . . .
@@ -201,8 +214,12 @@ impl<T, const N: usize> Buf<T, N> {
                         // 1 [D _ _ _ _ A B C D _]
                         // 2 [D _ _ _ _ A B A B C]
                         //    .             D . .
-                        self.copy_within_nonoverlapping(src + dst_to_end, 0, count - dst_to_end);
-                        self.copy_within(src, dst, dst_to_end);
+                        self.copy_within_nonoverlapping(
+                            src_index + dst_to_end,
+                            0,
+                            count - dst_to_end,
+                        );
+                        self.copy_within(src_index, dst_index, dst_to_end);
                     }
                     (false, false) => {
                         //      S . . . . . . .
@@ -211,12 +228,14 @@ impl<T, const N: usize> Buf<T, N> {
                         // 2 [E F G H _ _ A B C D] new
                         //    . . . .     D . . .
                         let mut buf = Self::new();
-                        let old = self.as_ptr();
-                        let new = buf.as_mut_ptr();
-                        let src = old.add(src);
-                        let dst = new.add(dst);
-                        ptr::copy_nonoverlapping(src, dst, dst_to_end);
-                        ptr::copy_nonoverlapping(src.add(dst_to_end), new, count - dst_to_end);
+                        copy_nonoverlapping(self, &mut buf, src_index, dst_index, dst_to_end);
+                        copy_nonoverlapping(
+                            self,
+                            &mut buf,
+                            src_index + dst_to_end,
+                            0,
+                            count - dst_to_end,
+                        );
                         *self = buf;
                     }
                 }
@@ -225,7 +244,7 @@ impl<T, const N: usize> Buf<T, N> {
                 hint::unreachable_unchecked();
             },
             (true, true, true) => unsafe {
-                match dst_to_src >= count {
+                match count <= dst_to_src {
                     true => {
                         //    . . . .     S . . .
                         // 0 [E F G H _ _ A B C D]
@@ -235,7 +254,7 @@ impl<T, const N: usize> Buf<T, N> {
                         //    . . . . .     D . .
                         self.copy_within(0, src_to_dst, count - src_to_end);
                         self.copy_within_nonoverlapping(dst_to_src, 0, src_to_dst);
-                        self.copy_within(src, dst, dst_to_end);
+                        self.copy_within(src_index, dst_index, dst_to_end);
                     }
                     false => {
                         //    . . . .     S . . .
@@ -245,32 +264,28 @@ impl<T, const N: usize> Buf<T, N> {
                         // 3 [B C D E F G H _ _ A] new
                         //    . . . . . . .     D
                         let mut buf = Self::new();
-                        let old = self.as_ptr();
-                        let new = buf.as_mut_ptr();
-                        let src = old.add(src);
-                        let dst = new.add(dst);
-                        ptr::copy_nonoverlapping(src, dst, dst_to_end);
-                        ptr::copy_nonoverlapping(src.add(dst_to_end), new, src_to_dst);
-                        ptr::copy_nonoverlapping(old, new.add(src_to_dst), count - src_to_end);
+                        copy_nonoverlapping(self, &mut buf, src_index, dst_index, dst_to_end);
+                        copy_nonoverlapping(self, &mut buf, src_index + dst_to_end, 0, src_to_dst);
+                        copy_nonoverlapping(self, &mut buf, 0, src_to_dst, count - src_to_end);
                         *self = buf;
                     }
                 }
             },
             (false, false, false) => unsafe {
-                match dst_to_src >= count {
+                match count <= dst_to_src {
                     true => {
                         //              S . . .
                         // 0 [_ _ _ _ _ A B C D _]
                         // 1 [_ A B C D A B C D _]
                         //      D . . .
-                        self.copy_within_nonoverlapping(src, dst, count);
+                        self.copy_within_nonoverlapping(src_index, dst_index, count);
                     }
                     false => {
                         //            S . . .
                         // 0 [_ _ _ _ A B C D _ _]
                         // 1 [_ A B C D B C D _ _]
                         //      D . . .
-                        self.copy_within(src, dst, count);
+                        self.copy_within(src_index, dst_index, count);
                     }
                 }
             },
@@ -278,15 +293,19 @@ impl<T, const N: usize> Buf<T, N> {
                 hint::unreachable_unchecked();
             },
             (false, true, false) => unsafe {
-                match (src_to_dst >= count, dst_to_src >= count) {
+                match (count <= src_to_dst, count <= dst_to_src) {
                     (true, true) => {
                         //    .             S . .
                         // 0 [D _ _ _ _ _ _ A B C]
                         // 1 [D A B C _ _ _ A B C]
                         // 2 [D A B C D _ _ A B C]
                         //      D . . .
-                        self.copy_within_nonoverlapping(src, dst, src_to_end);
-                        self.copy_within_nonoverlapping(0, dst + src_to_end, count - src_to_end);
+                        self.copy_within_nonoverlapping(src_index, dst_index, src_to_end);
+                        self.copy_within_nonoverlapping(
+                            0,
+                            dst_index + src_to_end,
+                            count - src_to_end,
+                        );
                     }
                     (true, false) => {
                         //    .             S . .
@@ -294,8 +313,12 @@ impl<T, const N: usize> Buf<T, N> {
                         // 1 [D _ _ _ _ A B C B C]
                         // 2 [D _ _ _ _ A B C D C]
                         //              D . . .
-                        self.copy_within(src, dst, src_to_end);
-                        self.copy_within_nonoverlapping(0, dst + src_to_end, count - src_to_end);
+                        self.copy_within(src_index, dst_index, src_to_end);
+                        self.copy_within_nonoverlapping(
+                            0,
+                            dst_index + src_to_end,
+                            count - src_to_end,
+                        );
                     }
                     (false, true) => {
                         //    . . .             S
@@ -303,8 +326,8 @@ impl<T, const N: usize> Buf<T, N> {
                         // 1 [B C B C D _ _ _ _ A]
                         // 2 [B A B C D _ _ _ _ A]
                         //      D . . .
-                        self.copy_within(0, dst + src_to_end, count - src_to_end);
-                        self.copy_within_nonoverlapping(src, dst, src_to_end);
+                        self.copy_within(0, dst_index + src_to_end, count - src_to_end);
+                        self.copy_within_nonoverlapping(src_index, dst_index, src_to_end);
                     }
                     (false, false) => {
                         //    . . . .     S . . .
@@ -313,18 +336,20 @@ impl<T, const N: usize> Buf<T, N> {
                         // 2 [_ A B C D E F G H _] new
                         //      D . . . . . . .
                         let mut buf = Self::new();
-                        let old = self.as_ptr();
-                        let new = buf.as_mut_ptr();
-                        let src = old.add(src);
-                        let dst = new.add(dst);
-                        ptr::copy_nonoverlapping(src, dst, src_to_end);
-                        ptr::copy_nonoverlapping(old, dst.add(src_to_end), count - src_to_end);
+                        copy_nonoverlapping(self, &mut buf, src_index, dst_index, src_to_end);
+                        copy_nonoverlapping(
+                            self,
+                            &mut buf,
+                            0,
+                            dst_index + src_to_end,
+                            count - src_to_end,
+                        );
                         *self = buf;
                     }
                 }
             },
             (false, true, true) => unsafe {
-                match src_to_dst >= count {
+                match count <= src_to_dst {
                     true => {
                         //    . . . . .     S . .
                         // 0 [D E F G H _ _ A B C]
@@ -332,7 +357,7 @@ impl<T, const N: usize> Buf<T, N> {
                         // 2 [D E F G H _ A B C D]
                         // 3 [E F G H H _ A B C D]
                         //    . . . .     D . . .
-                        self.copy_within(src, dst, src_to_end);
+                        self.copy_within(src_index, dst_index, src_to_end);
                         self.copy_within_nonoverlapping(0, src_to_dst, dst_to_src);
                         self.copy_within(dst_to_src, 0, count - dst_to_end);
                     }
@@ -344,13 +369,9 @@ impl<T, const N: usize> Buf<T, N> {
                         // 1 [E F G H _ _ A B C D] new
                         //    . . . .     D . . .
                         let mut buf = Self::new();
-                        let old = self.as_ptr();
-                        let new = buf.as_mut_ptr();
-                        let src = old.add(src);
-                        let dst = new.add(dst);
-                        ptr::copy_nonoverlapping(src, dst, src_to_end);
-                        ptr::copy_nonoverlapping(old, dst.add(src_to_end), dst_to_src);
-                        ptr::copy_nonoverlapping(old.add(dst_to_src), new, count - dst_to_end);
+                        copy_nonoverlapping(self, &mut buf, src_index, dst_index, src_to_end);
+                        copy_nonoverlapping(self, &mut buf, 0, dst_index + src_to_end, dst_to_src);
+                        copy_nonoverlapping(self, &mut buf, dst_to_src, 0, count - dst_to_end);
                         *self = buf;
                     }
                 }
@@ -385,5 +406,27 @@ impl<T, const N: usize> Buf<T, N> {
     /// - `index < 2 * N`.
     pub(crate) const fn wrap_index(index: usize) -> usize {
         if index < N { index } else { index - N }
+    }
+}
+
+/// The caller must ensure that:
+///
+/// - `src_index < N`.
+/// - `src_index + count <= N`.
+/// - `dst_index < M`.
+/// - `dst_index + count <= M`.
+pub(crate) const unsafe fn copy_nonoverlapping<T, const N: usize, const M: usize>(
+    src: &Buf<T, N>,
+    dst: &mut Buf<T, M>,
+    src_index: usize,
+    dst_index: usize,
+    count: usize,
+) {
+    let src_base = src.as_ptr();
+    let dst_base = dst.as_mut_ptr();
+    unsafe {
+        let src = src_base.add(src_index);
+        let dst = dst_base.add(dst_index);
+        ptr::copy_nonoverlapping(src, dst, count);
     }
 }

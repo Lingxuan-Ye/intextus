@@ -3,6 +3,7 @@ mod iter;
 
 pub use self::iter::IntoIter;
 
+use crate::buf;
 use crate::buf::Buf;
 use crate::deque::InlineDeque;
 use core::borrow::{Borrow, BorrowMut};
@@ -11,7 +12,6 @@ use core::fmt;
 use core::hash::{Hash, Hasher};
 use core::mem::MaybeUninit;
 use core::ops::{Deref, DerefMut, Index, IndexMut};
-use core::ptr;
 use core::slice;
 use core::slice::SliceIndex;
 
@@ -246,12 +246,11 @@ impl<T, const N: usize> InlineVec<T, N> {
         let mut result = Self::new();
         let dst_len = self.len - at;
         self.len = at;
-        let src_base = self.as_ptr();
-        let dst_base = result.as_mut_ptr();
         unsafe {
-            let src = src_base.add(at);
-            let dst = dst_base;
-            ptr::copy_nonoverlapping(src, dst, dst_len);
+            let src_index = at;
+            let dst_index = 0;
+            let count = dst_len;
+            buf::copy_nonoverlapping(&self.buf, &mut result.buf, src_index, dst_index, count);
         }
         result.len = dst_len;
         Some(result)
@@ -458,5 +457,11 @@ where
 impl<T, const N: usize> Drop for InlineVec<T, N> {
     fn drop(&mut self) {
         self.clear();
+    }
+}
+
+impl<T, const N: usize> InlineVec<T, N> {
+    pub(crate) const fn buf(&self) -> &Buf<T, N> {
+        &self.buf
     }
 }
