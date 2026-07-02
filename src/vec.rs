@@ -267,6 +267,14 @@ impl<T, const N: usize> InlineVec<T, N> {
             self.buf.assume_init_drop(to_drop);
         }
     }
+
+    pub(crate) const fn buf(&self) -> &Buf<T, N> {
+        &self.buf
+    }
+
+    pub(crate) const unsafe fn buf_mut(&mut self) -> &mut Buf<T, N> {
+        &mut self.buf
+    }
 }
 
 impl<T, const N: usize> fmt::Debug for InlineVec<T, N>
@@ -457,15 +465,5 @@ where
 impl<T, const N: usize> Drop for InlineVec<T, N> {
     fn drop(&mut self) {
         self.clear();
-    }
-}
-
-impl<T, const N: usize> InlineVec<T, N> {
-    pub(crate) const fn buf(&self) -> &Buf<T, N> {
-        &self.buf
-    }
-
-    pub(crate) const unsafe fn buf_mut(&mut self) -> &mut Buf<T, N> {
-        &mut self.buf
     }
 }
