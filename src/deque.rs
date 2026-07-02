@@ -649,12 +649,14 @@ impl<T, const N: usize> InlineDeque<T, N> {
     }
 
     pub fn clear(&mut self) {
-        let (prefix, suffix) = self.slice_ranges();
+        let (prefix, suffix) = self.slice_spans();
+        let prefix_to_drop = Range::from(prefix);
+        let suffix_to_drop = Range::from(suffix);
         self.head = 0;
         self.len = 0;
         unsafe {
-            self.buf.assume_init_drop(prefix);
-            self.buf.assume_init_drop(suffix);
+            self.buf.assume_init_drop(prefix_to_drop);
+            self.buf.assume_init_drop(suffix_to_drop);
         }
     }
 
@@ -949,29 +951,6 @@ impl<T, const N: usize> InlineDeque<T, N> {
         (prefix, suffix)
     }
 
-    const fn slice_ranges(&self) -> (Range<usize>, Range<usize>) {
-        let prefix;
-        let suffix;
-        let head_to_end = N - self.head;
-        if self.len <= head_to_end {
-            prefix = Range {
-                start: self.head,
-                end: self.head + self.len,
-            };
-            suffix = Range { start: 0, end: 0 };
-        } else {
-            prefix = Range {
-                start: self.head,
-                end: N,
-            };
-            suffix = Range {
-                start: 0,
-                end: self.len - head_to_end,
-            };
-        }
-        (prefix, suffix)
-    }
-
     /// The caller must ensure that:
     ///
     /// - `index <= N`.
@@ -1027,7 +1006,16 @@ impl<T, const N: usize> InlineDeque<T, N> {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct Span {
     pub(crate) start: usize,
     pub(crate) len: usize,
+}
+
+impl From<Span> for Range<usize> {
+    fn from(value: Span) -> Self {
+        let start = value.start;
+        let end = value.start + value.len;
+        Range { start, end }
+    }
 }

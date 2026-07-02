@@ -3,6 +3,7 @@ use core::fmt;
 use core::iter::FusedIterator;
 use core::mem;
 use core::ops::RangeBounds;
+use core::range::Range;
 use core::slice;
 
 impl<T, const N: usize> InlineDeque<T, N> {
@@ -322,17 +323,17 @@ impl<T, const N: usize> Iterator for IntoIter<T, N> {
         F: FnMut(B, Self::Item) -> B,
     {
         let mut deque = self.deque;
-        let (prefix, suffix) = deque.slice_ranges();
+        let (prefix, suffix) = deque.slice_spans();
         deque.head = 0;
         deque.len = 0;
         let mut accum = init;
-        for index in prefix {
+        for index in Range::from(prefix) {
             unsafe {
                 let value = deque.buf.assume_init_read(index);
                 accum = f(accum, value);
             }
         }
-        for index in suffix {
+        for index in Range::from(suffix) {
             unsafe {
                 let value = deque.buf.assume_init_read(index);
                 accum = f(accum, value);
@@ -358,17 +359,17 @@ impl<T, const N: usize> DoubleEndedIterator for IntoIter<T, N> {
         F: FnMut(B, Self::Item) -> B,
     {
         let mut deque = self.deque;
-        let (prefix, suffix) = deque.slice_ranges();
+        let (prefix, suffix) = deque.slice_spans();
         deque.head = 0;
         deque.len = 0;
         let mut accum = init;
-        for index in suffix.into_iter().rev() {
+        for index in Range::from(suffix).into_iter().rev() {
             unsafe {
                 let value = deque.buf.assume_init_read(index);
                 accum = f(accum, value);
             }
         }
-        for index in prefix.into_iter().rev() {
+        for index in Range::from(prefix).into_iter().rev() {
             unsafe {
                 let value = deque.buf.assume_init_read(index);
                 accum = f(accum, value);
