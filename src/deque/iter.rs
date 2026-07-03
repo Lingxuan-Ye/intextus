@@ -322,18 +322,20 @@ impl<T, const N: usize> Iterator for IntoIter<T, N> {
     where
         F: FnMut(B, Self::Item) -> B,
     {
+        let mut accum = init;
         let mut deque = self.deque;
         let (prefix, suffix) = deque.slice_spans();
-        deque.head = 0;
-        deque.len = 0;
-        let mut accum = init;
         for index in Range::from(prefix) {
+            deque.head = index + 1;
+            deque.len -= 1;
             unsafe {
                 let value = deque.buf.assume_init_read(index);
                 accum = f(accum, value);
             }
         }
         for index in Range::from(suffix) {
+            deque.head = index + 1;
+            deque.len -= 1;
             unsafe {
                 let value = deque.buf.assume_init_read(index);
                 accum = f(accum, value);
@@ -358,18 +360,18 @@ impl<T, const N: usize> DoubleEndedIterator for IntoIter<T, N> {
     where
         F: FnMut(B, Self::Item) -> B,
     {
+        let mut accum = init;
         let mut deque = self.deque;
         let (prefix, suffix) = deque.slice_spans();
-        deque.head = 0;
-        deque.len = 0;
-        let mut accum = init;
         for index in Range::from(suffix).into_iter().rev() {
+            deque.len -= 1;
             unsafe {
                 let value = deque.buf.assume_init_read(index);
                 accum = f(accum, value);
             }
         }
         for index in Range::from(prefix).into_iter().rev() {
+            deque.len -= 1;
             unsafe {
                 let value = deque.buf.assume_init_read(index);
                 accum = f(accum, value);
