@@ -845,6 +845,24 @@ where
     }
 }
 
+impl<T, const N: usize, U, const M: usize> PartialEq<InlineDeque<U, M>> for [T; N]
+where
+    T: PartialEq<U>,
+{
+    fn eq(&self, other: &InlineDeque<U, M>) -> bool {
+        self.iter().eq(other)
+    }
+}
+
+impl<T, U, const M: usize> PartialEq<InlineDeque<U, M>> for [T]
+where
+    T: PartialEq<U>,
+{
+    fn eq(&self, other: &InlineDeque<U, M>) -> bool {
+        self.iter().eq(other)
+    }
+}
+
 impl<T, const N: usize> Eq for InlineDeque<T, N> where T: Eq {}
 
 impl<T, const N: usize, U, const M: usize> PartialOrd<InlineDeque<U, M>> for InlineDeque<T, N>
@@ -879,6 +897,24 @@ where
     T: PartialOrd<U>,
 {
     fn partial_cmp(&self, other: &[U]) -> Option<Ordering> {
+        self.iter().partial_cmp(other)
+    }
+}
+
+impl<T, const N: usize, U, const M: usize> PartialOrd<InlineDeque<U, M>> for [T; N]
+where
+    T: PartialOrd<U>,
+{
+    fn partial_cmp(&self, other: &InlineDeque<U, M>) -> Option<Ordering> {
+        self.iter().partial_cmp(other)
+    }
+}
+
+impl<T, U, const M: usize> PartialOrd<InlineDeque<U, M>> for [T]
+where
+    T: PartialOrd<U>,
+{
+    fn partial_cmp(&self, other: &InlineDeque<U, M>) -> Option<Ordering> {
         self.iter().partial_cmp(other)
     }
 }

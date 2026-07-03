@@ -387,6 +387,24 @@ where
     }
 }
 
+impl<T, const N: usize, U, const M: usize> PartialEq<InlineVec<U, M>> for [T; N]
+where
+    T: PartialEq<U>,
+{
+    fn eq(&self, other: &InlineVec<U, M>) -> bool {
+        self.eq(other.as_slice())
+    }
+}
+
+impl<T, U, const M: usize> PartialEq<InlineVec<U, M>> for [T]
+where
+    T: PartialEq<U>,
+{
+    fn eq(&self, other: &InlineVec<U, M>) -> bool {
+        self.eq(other.as_slice())
+    }
+}
+
 impl<T, const N: usize> Eq for InlineVec<T, N> where T: Eq {}
 
 impl<T, const N: usize, U, const M: usize> PartialOrd<InlineVec<U, M>> for InlineVec<T, N>
@@ -421,6 +439,24 @@ where
     T: PartialOrd<U>,
 {
     fn partial_cmp(&self, other: &[U]) -> Option<Ordering> {
+        self.iter().partial_cmp(other)
+    }
+}
+
+impl<T, const N: usize, U, const M: usize> PartialOrd<InlineVec<U, M>> for [T; N]
+where
+    T: PartialOrd<U>,
+{
+    fn partial_cmp(&self, other: &InlineVec<U, M>) -> Option<Ordering> {
+        self.iter().partial_cmp(other)
+    }
+}
+
+impl<T, U, const M: usize> PartialOrd<InlineVec<U, M>> for [T]
+where
+    T: PartialOrd<U>,
+{
+    fn partial_cmp(&self, other: &InlineVec<U, M>) -> Option<Ordering> {
         self.iter().partial_cmp(other)
     }
 }
