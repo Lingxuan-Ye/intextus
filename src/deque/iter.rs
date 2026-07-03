@@ -314,6 +314,16 @@ impl<T, const N: usize> Iterator for IntoIter<T, N> {
         self.len()
     }
 
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        if n >= self.len() {
+            self.deque.truncate_front(0);
+            return None;
+        }
+        let len = self.len();
+        self.deque.truncate_front(len - n);
+        self.deque.pop_front()
+    }
+
     fn last(mut self) -> Option<Self::Item> {
         self.next_back()
     }
@@ -353,6 +363,16 @@ impl<T, const N: usize> ExactSizeIterator for IntoIter<T, N> {
 
 impl<T, const N: usize> DoubleEndedIterator for IntoIter<T, N> {
     fn next_back(&mut self) -> Option<Self::Item> {
+        self.deque.pop_back()
+    }
+
+    fn nth_back(&mut self, n: usize) -> Option<Self::Item> {
+        if n >= self.len() {
+            self.deque.truncate(0);
+            return None;
+        }
+        let len = self.len();
+        self.deque.truncate(len - n);
         self.deque.pop_back()
     }
 
