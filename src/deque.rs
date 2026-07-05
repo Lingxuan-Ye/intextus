@@ -647,16 +647,6 @@ impl<T, const N: usize> InlineDeque<T, N> {
         Some(result)
     }
 
-    pub fn clear(&mut self) {
-        let (prefix_to_drop, suffix_to_drop) = self.slice_spans();
-        self.head = 0;
-        self.len = 0;
-        unsafe {
-            self.buf.assume_init_drop(prefix_to_drop);
-            self.buf.assume_init_drop(suffix_to_drop);
-        }
-    }
-
     pub const fn rotate_left(&mut self, n: usize) -> Option<()> {
         if n > self.len {
             return None;
@@ -758,6 +748,16 @@ impl<T, const N: usize> InlineDeque<T, N> {
             }
             let ptr = base.add(self.head);
             slice::from_raw_parts_mut(ptr, self.len)
+        }
+    }
+
+    pub fn clear(&mut self) {
+        let (prefix_to_drop, suffix_to_drop) = self.slice_spans();
+        self.head = 0;
+        self.len = 0;
+        unsafe {
+            self.buf.assume_init_drop(prefix_to_drop);
+            self.buf.assume_init_drop(suffix_to_drop);
         }
     }
 
