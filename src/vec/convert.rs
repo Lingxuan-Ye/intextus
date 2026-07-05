@@ -1,16 +1,18 @@
 use super::InlineVec;
 use crate::buf;
 use crate::deque::InlineDeque;
+use crate::error::Error;
 use crate::string::InlineString;
 use core::mem::ManuallyDrop;
 
 impl<T, const N: usize, const M: usize> TryFrom<InlineDeque<T, M>> for InlineVec<T, N> {
-    type Error = InlineDeque<T, M>;
+    type Error = Error<InlineDeque<T, M>>;
 
     fn try_from(value: InlineDeque<T, M>) -> Result<Self, Self::Error> {
         let len = value.len();
         if len > N {
-            return Err(value);
+            let error = unsafe { Error::capacity_overflow::<N>(Some(len), value) };
+            return Err(error);
         }
         let value = ManuallyDrop::new(value);
         let (prefix, suffix) = value.slice_spans();
@@ -31,12 +33,13 @@ impl<T, const N: usize, const M: usize> TryFrom<InlineDeque<T, M>> for InlineVec
 }
 
 impl<const N: usize, const M: usize> TryFrom<InlineString<M>> for InlineVec<u8, N> {
-    type Error = InlineString<M>;
+    type Error = Error<InlineString<M>>;
 
     fn try_from(value: InlineString<M>) -> Result<Self, Self::Error> {
         let len = value.len();
         if len > N {
-            return Err(value);
+            let error = unsafe { Error::capacity_overflow::<N>(Some(len), value) };
+            return Err(error);
         }
         let mut result = Self::new();
         unsafe {

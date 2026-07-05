@@ -2,6 +2,7 @@ pub use self::iter::{IntoIter, Iter, IterMut};
 
 use crate::buf;
 use crate::buf::{Buf, Span};
+use crate::error::{Error, IndexOutOfBounds, UpperBound};
 use crate::vec::InlineVec;
 use core::cmp::Ordering;
 use core::fmt;
@@ -116,33 +117,35 @@ impl<T, const N: usize> InlineDeque<T, N> {
         self.get_mut(self.len.wrapping_sub(1))
     }
 
-    pub fn push_front(&mut self, value: T) -> Option<()> {
+    pub fn push_front(&mut self, value: T) -> Result<(), Error<T>> {
         self.push_front_mut(value).map(|_| ())
     }
 
-    pub fn push_front_mut(&mut self, value: T) -> Option<&mut T> {
+    pub fn push_front_mut(&mut self, value: T) -> Result<&mut T, Error<T>> {
         if self.len == N {
-            return None;
+            let error = Error::full::<N>(value);
+            return Err(error);
         }
         let index = Buf::<T, N>::wrap_sub(self.head, 1);
         let slot = unsafe { self.buf.write(index, value) };
         self.head = index;
         self.len += 1;
-        Some(slot)
+        Ok(slot)
     }
 
-    pub fn push_back(&mut self, value: T) -> Option<()> {
+    pub fn push_back(&mut self, value: T) -> Result<(), Error<T>> {
         self.push_back_mut(value).map(|_| ())
     }
 
-    pub fn push_back_mut(&mut self, value: T) -> Option<&mut T> {
+    pub fn push_back_mut(&mut self, value: T) -> Result<&mut T, Error<T>> {
         if self.len == N {
-            return None;
+            let error = Error::full::<N>(value);
+            return Err(error);
         }
         let index = Buf::<T, N>::wrap_add(self.head, self.len);
         let slot = unsafe { self.buf.write(index, value) };
         self.len += 1;
-        Some(slot)
+        Ok(slot)
     }
 
     pub fn pop_front(&mut self) -> Option<T> {
@@ -188,13 +191,19 @@ impl<T, const N: usize> InlineDeque<T, N> {
         }
     }
 
-    pub fn insert(&mut self, index: usize, value: T) -> Option<()> {
+    pub fn insert(&mut self, index: usize, value: T) -> Result<(), Error<T>> {
         self.insert_mut(index, value).map(|_| ())
     }
 
-    pub fn insert_mut(&mut self, index: usize, value: T) -> Option<&mut T> {
-        if index > self.len || self.len == N {
-            return None;
+    pub fn insert_mut(&mut self, index: usize, value: T) -> Result<&mut T, Error<T>> {
+        if index > self.len {
+            let upper = UpperBound::Included(self.len);
+            let error = Error::index_out_of_bounds(index, upper, value);
+            return Err(error);
+        }
+        if self.len == N {
+            let error = Error::full::<N>(value);
+            return Err(error);
         }
         let prefix_len = index;
         let suffix_len = self.len - prefix_len;
@@ -207,7 +216,7 @@ impl<T, const N: usize> InlineDeque<T, N> {
             let index = self.physical_index(index);
             let slot = unsafe { self.buf.write(index, value) };
             self.len += 1;
-            Some(slot)
+            Ok(slot)
         } else {
             let index = self.physical_index(index);
             let next = Buf::<T, N>::wrap_add(index, 1);
@@ -216,7 +225,7 @@ impl<T, const N: usize> InlineDeque<T, N> {
             }
             let slot = unsafe { self.buf.write(index, value) };
             self.len += 1;
-            Some(slot)
+            Ok(slot)
         }
     }
 
@@ -277,16 +286,23 @@ impl<T, const N: usize> InlineDeque<T, N> {
         Some(value)
     }
 
-    pub const fn swap(&mut self, i: usize, j: usize) -> Option<()> {
-        if i >= self.len || j >= self.len {
-            return None;
+    pub const fn swap(&mut self, i: usize, j: usize) -> Result<(), Error> {
+        if i >= self.len {
+            let upper = UpperBound::Excluded(self.len);
+            let error = Error::index_out_of_bounds(i, upper, ());
+            return Err(error);
+        }
+        if j >= self.len {
+            let upper = UpperBound::Excluded(self.len);
+            let error = Error::index_out_of_bounds(j, upper, ());
+            return Err(error);
         }
         let i = self.physical_index(i);
         let j = self.physical_index(j);
         unsafe {
             self.buf.swap(i, j);
         }
-        Some(())
+        Ok(())
     }
 
     pub fn extend<I>(&mut self, iter: I) -> I::IntoIter
@@ -429,16 +445,17 @@ impl<T, const N: usize> InlineDeque<T, N> {
         iter.as_slice()
     }
 
-    pub fn resize(&mut self, len: usize, value: T) -> Option<()>
+    pub fn resize(&mut self, len: usize, value: T) -> Result<Option<T>, Error<T>>
     where
         T: Clone,
     {
         if len > N {
-            return None;
+            let error = unsafe { Error::capacity_overflow::<N>(Some(len), value) };
+            return Err(error);
         }
         if len <= self.len {
             self.truncate(len);
-            return Some(());
+            return Ok(Some(value));
         }
         let head_to_end = N - self.head;
         if len <= head_to_end {
@@ -491,19 +508,20 @@ impl<T, const N: usize> InlineDeque<T, N> {
             }
             self.len += 1;
         }
-        Some(())
+        Ok(None)
     }
 
-    pub fn resize_with<F>(&mut self, len: usize, mut f: F) -> Option<()>
+    pub fn resize_with<F>(&mut self, len: usize, mut f: F) -> Result<(), Error>
     where
         F: FnMut(usize) -> T,
     {
         if len > N {
-            return None;
+            let error = unsafe { Error::capacity_overflow::<N>(Some(len), ()) };
+            return Err(error);
         }
         if len <= self.len {
             self.truncate(len);
-            return Some(());
+            return Ok(());
         }
         let head_to_end = N - self.head;
         if len <= head_to_end {
@@ -542,7 +560,7 @@ impl<T, const N: usize> InlineDeque<T, N> {
                 self.len += 1;
             }
         }
-        Some(())
+        Ok(())
     }
 
     pub fn truncate(&mut self, len: usize) {
@@ -608,9 +626,11 @@ impl<T, const N: usize> InlineDeque<T, N> {
         }
     }
 
-    pub const fn split_off(&mut self, at: usize) -> Option<Self> {
+    pub const fn split_off(&mut self, at: usize) -> Result<Self, Error> {
         if at > self.len {
-            return None;
+            let upper = UpperBound::Excluded(self.len);
+            let error = Error::index_out_of_bounds(at, upper, ());
+            return Err(error);
         }
         let mut result = Self::new();
         let src_len = self.len;
@@ -644,7 +664,7 @@ impl<T, const N: usize> InlineDeque<T, N> {
             }
         }
         result.len = dst_len;
-        Some(result)
+        Ok(result)
     }
 
     pub const fn rotate_left(&mut self, n: usize) {
@@ -1015,7 +1035,11 @@ impl<T, const N: usize> Index<usize> for InlineDeque<T, N> {
     fn index(&self, index: usize) -> &Self::Output {
         let len = self.len;
         match self.get(index) {
-            None => panic!("index out of bounds: the len is {len} but the index is {index}"),
+            None => {
+                let upper = UpperBound::Excluded(len);
+                let error = IndexOutOfBounds::new(index, upper);
+                panic!("{error}")
+            }
             Some(output) => output,
         }
     }
@@ -1025,7 +1049,11 @@ impl<T, const N: usize> IndexMut<usize> for InlineDeque<T, N> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         let len = self.len;
         match self.get_mut(index) {
-            None => panic!("index out of bounds: the len is {len} but the index is {index}"),
+            None => {
+                let upper = UpperBound::Excluded(len);
+                let error = IndexOutOfBounds::new(index, upper);
+                panic!("{error}")
+            }
             Some(output) => output,
         }
     }

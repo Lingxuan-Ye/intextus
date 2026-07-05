@@ -1,4 +1,5 @@
 use crate::buf::Buf;
+use crate::error::{StringError, UpperBound};
 use crate::vec::InlineVec;
 use core::borrow::{Borrow, BorrowMut};
 use core::cmp::Ordering;
@@ -19,20 +20,18 @@ impl<const N: usize> InlineString<N> {
         Self { vec }
     }
 
-    pub fn from_utf8(bytes: &[u8]) -> Option<Self> {
-        let Ok(string) = str::from_utf8(bytes) else {
-            return None;
-        };
+    pub fn from_utf8(bytes: &[u8]) -> Result<Self, StringError> {
+        let string = str::from_utf8(bytes).map_err(StringError::Utf8Error)?;
         let mut result = Self::new();
         result.push_str(string)?;
-        Some(result)
+        Ok(result)
     }
 
     pub const unsafe fn from_utf8_unchecked(bytes: InlineVec<u8, N>) -> Self {
         Self { vec: bytes }
     }
 
-    pub fn from_utf8_lossy(bytes: &[u8]) -> Option<Self> {
+    pub fn from_utf8_lossy(bytes: &[u8]) -> Result<Self, StringError> {
         const REPLACEMENT: &str = "\u{FFFD}";
         let mut result = Self::new();
         for chunk in bytes.utf8_chunks() {
@@ -42,25 +41,25 @@ impl<const N: usize> InlineString<N> {
                 result.push_str(REPLACEMENT)?;
             }
         }
-        Some(result)
+        Ok(result)
     }
 
-    pub fn from_utf16(bytes: &[u16]) -> Option<Self> {
+    pub fn from_utf16(bytes: &[u16]) -> Result<Self, StringError> {
         let mut result = Self::new();
         for char in char::decode_utf16(bytes.iter().cloned()) {
-            let char = char.ok()?;
+            let char = char.map_err(StringError::Utf16Error)?;
             result.push(char)?;
         }
-        Some(result)
+        Ok(result)
     }
 
-    pub fn from_utf16_lossy(bytes: &[u16]) -> Option<Self> {
+    pub fn from_utf16_lossy(bytes: &[u16]) -> Result<Self, StringError> {
         let mut result = Self::new();
         for char in char::decode_utf16(bytes.iter().cloned()) {
             let char = char.unwrap_or(char::REPLACEMENT_CHARACTER);
             result.push(char)?;
         }
-        Some(result)
+        Ok(result)
     }
 
     pub const fn capacity(&self) -> usize {
@@ -101,11 +100,16 @@ impl<const N: usize> InlineString<N> {
         self.vec
     }
 
-    pub const fn push(&mut self, char: char) -> Option<()> {
+    pub const fn push(&mut self, char: char) -> Result<(), StringError> {
         let len = self.vec.len();
         let char_len = char.len_utf8();
-        if char_len > N - len {
-            return None;
+        let Some(new_len) = len.checked_add(char_len) else {
+            let error = unsafe { StringError::capacity_overflow::<N>(None) };
+            return Err(error);
+        };
+        if new_len > N {
+            let error = unsafe { StringError::capacity_overflow::<N>(Some(new_len)) };
+            return Err(error);
         }
         let mut buf = [0; char::MAX_LEN_UTF8];
         char.encode_utf8(&mut buf);
@@ -114,25 +118,30 @@ impl<const N: usize> InlineString<N> {
                 .as_mut_ptr()
                 .add(len)
                 .copy_from_nonoverlapping(buf.as_ptr(), char_len);
-            self.vec.set_len(len + char_len);
+            self.vec.set_len(new_len);
         }
-        Some(())
+        Ok(())
     }
 
-    pub const fn push_str(&mut self, string: &str) -> Option<()> {
+    pub const fn push_str(&mut self, string: &str) -> Result<(), StringError> {
         let len = self.vec.len();
         let string_len = string.len();
-        if string_len > N - len {
-            return None;
+        let Some(new_len) = len.checked_add(string_len) else {
+            let error = unsafe { StringError::capacity_overflow::<N>(None) };
+            return Err(error);
+        };
+        if new_len > N {
+            let error = unsafe { StringError::capacity_overflow::<N>(Some(new_len)) };
+            return Err(error);
         }
         unsafe {
             self.vec
                 .as_mut_ptr()
                 .add(len)
                 .copy_from_nonoverlapping(string.as_ptr(), string_len);
-            self.vec.set_len(len + string_len);
+            self.vec.set_len(new_len);
         }
-        Some(())
+        Ok(())
     }
 
     pub fn pop(&mut self) -> Option<char> {
@@ -145,14 +154,20 @@ impl<const N: usize> InlineString<N> {
         Some(char)
     }
 
-    pub const fn insert(&mut self, index: usize, char: char) -> Option<()> {
+    pub const fn insert(&mut self, index: usize, char: char) -> Result<(), StringError> {
         if !self.as_str().is_char_boundary(index) {
-            return None;
+            let error = StringError::NotCharBoundary(index);
+            return Err(error);
         }
         let len = self.vec.len();
         let char_len = char.len_utf8();
-        if char_len > N - len {
-            return None;
+        let Some(new_len) = len.checked_add(char_len) else {
+            let error = unsafe { StringError::capacity_overflow::<N>(None) };
+            return Err(error);
+        };
+        if new_len > N {
+            let error = unsafe { StringError::capacity_overflow::<N>(Some(new_len)) };
+            return Err(error);
         }
         if index != len {
             unsafe {
@@ -168,19 +183,25 @@ impl<const N: usize> InlineString<N> {
                 .as_mut_ptr()
                 .add(index)
                 .copy_from_nonoverlapping(buf.as_ptr(), char_len);
-            self.vec.set_len(len + char_len);
+            self.vec.set_len(new_len);
         }
-        Some(())
+        Ok(())
     }
 
-    pub const fn insert_str(&mut self, index: usize, string: &str) -> Option<()> {
+    pub const fn insert_str(&mut self, index: usize, string: &str) -> Result<(), StringError> {
         if !self.as_str().is_char_boundary(index) {
-            return None;
+            let error = StringError::NotCharBoundary(index);
+            return Err(error);
         }
         let len = self.vec.len();
         let string_len = string.len();
-        if string_len > N - len {
-            return None;
+        let Some(new_len) = len.checked_add(string_len) else {
+            let error = unsafe { StringError::capacity_overflow::<N>(None) };
+            return Err(error);
+        };
+        if new_len > N {
+            let error = unsafe { StringError::capacity_overflow::<N>(Some(new_len)) };
+            return Err(error);
         }
         if index != len {
             unsafe {
@@ -194,9 +215,9 @@ impl<const N: usize> InlineString<N> {
                 .as_mut_ptr()
                 .add(index)
                 .copy_from_nonoverlapping(string.as_ptr(), string_len);
-            self.vec.set_len(len + string_len);
+            self.vec.set_len(new_len);
         }
-        Some(())
+        Ok(())
     }
 
     pub fn remove(&mut self, index: usize) -> Option<char> {
@@ -217,22 +238,32 @@ impl<const N: usize> InlineString<N> {
         Some(char)
     }
 
-    pub fn truncate(&mut self, len: usize) -> Option<()> {
+    pub fn truncate(&mut self, len: usize) -> Result<(), StringError> {
         if len > self.vec.len() {
-            return Some(());
+            return Ok(());
         }
         if !self.as_str().is_char_boundary(len) {
-            return None;
+            let error = StringError::NotCharBoundary(len);
+            return Err(error);
         }
         self.vec.truncate(len);
-        Some(())
+        Ok(())
     }
 
-    pub fn split_off(&mut self, at: usize) -> Option<Self> {
+    pub fn split_off(&mut self, at: usize) -> Result<Self, StringError> {
         if !self.as_str().is_char_boundary(at) {
-            return None;
+            let error = StringError::NotCharBoundary(at);
+            return Err(error);
         }
-        self.vec.split_off(at).map(|vec| Self { vec })
+        let len = self.vec.len();
+        if at > len {
+            let upper = UpperBound::Excluded(len);
+            let error = StringError::index_out_of_bounds(at, upper);
+            return Err(error);
+        }
+        let vec = unsafe { self.vec.split_off(at).unwrap_unchecked() };
+        let string = Self { vec };
+        Ok(string)
     }
 
     pub fn clear(&mut self) {
