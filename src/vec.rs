@@ -1,18 +1,20 @@
-mod iter;
-
 pub use self::iter::IntoIter;
 
+use crate::buf;
 use crate::buf::Buf;
 use crate::deque::InlineDeque;
+use crate::error::{Error, UpperBound};
 use core::borrow::{Borrow, BorrowMut};
 use core::cmp::Ordering;
 use core::fmt;
 use core::hash::{Hash, Hasher};
 use core::mem::MaybeUninit;
 use core::ops::{Deref, DerefMut, Index, IndexMut};
-use core::ptr;
 use core::slice;
 use core::slice::SliceIndex;
+
+mod convert;
+mod iter;
 
 pub struct InlineVec<T, const N: usize> {
     len: usize,
@@ -64,18 +66,19 @@ impl<T, const N: usize> InlineVec<T, N> {
         self.len = len;
     }
 
-    pub fn push(&mut self, value: T) -> Option<()> {
+    pub fn push(&mut self, value: T) -> Result<(), Error<T>> {
         self.push_mut(value).map(|_| ())
     }
 
-    pub fn push_mut(&mut self, value: T) -> Option<&mut T> {
+    pub fn push_mut(&mut self, value: T) -> Result<&mut T, Error<T>> {
         if self.len == N {
-            return None;
+            let error = Error::full::<N>(value);
+            return Err(error);
         }
         let index = self.len;
         let slot = unsafe { self.buf.write(index, value) };
         self.len += 1;
-        Some(slot)
+        Ok(slot)
     }
 
     pub fn pop(&mut self) -> Option<T> {
@@ -95,13 +98,19 @@ impl<T, const N: usize> InlineVec<T, N> {
         if predicate(last) { self.pop() } else { None }
     }
 
-    pub fn insert(&mut self, index: usize, value: T) -> Option<()> {
+    pub fn insert(&mut self, index: usize, value: T) -> Result<(), Error<T>> {
         self.insert_mut(index, value).map(|_| ())
     }
 
-    pub fn insert_mut(&mut self, index: usize, value: T) -> Option<&mut T> {
-        if index > self.len || self.len == N {
-            return None;
+    pub fn insert_mut(&mut self, index: usize, value: T) -> Result<&mut T, Error<T>> {
+        if index > self.len {
+            let upper = UpperBound::Included(self.len);
+            let error = Error::index_out_of_bounds(index, upper, value);
+            return Err(error);
+        }
+        if self.len == N {
+            let error = Error::full::<N>(value);
+            return Err(error);
         }
         if index != self.len {
             unsafe {
@@ -110,7 +119,7 @@ impl<T, const N: usize> InlineVec<T, N> {
         }
         let slot = unsafe { self.buf.write(index, value) };
         self.len += 1;
-        Some(slot)
+        Ok(slot)
     }
 
     pub fn remove(&mut self, index: usize) -> Option<T> {
@@ -141,14 +150,21 @@ impl<T, const N: usize> InlineVec<T, N> {
         Some(value)
     }
 
-    pub const fn swap(&mut self, i: usize, j: usize) -> Option<()> {
-        if i >= self.len || j >= self.len {
-            return None;
+    pub const fn swap(&mut self, i: usize, j: usize) -> Result<(), Error> {
+        if i >= self.len {
+            let upper = UpperBound::Excluded(self.len);
+            let error = Error::index_out_of_bounds(i, upper, ());
+            return Err(error);
+        }
+        if j >= self.len {
+            let upper = UpperBound::Excluded(self.len);
+            let error = Error::index_out_of_bounds(j, upper, ());
+            return Err(error);
         }
         unsafe {
             self.buf.swap(i, j);
         }
-        Some(())
+        Ok(())
     }
 
     pub fn extend<I>(&mut self, iter: I) -> I::IntoIter
@@ -180,16 +196,17 @@ impl<T, const N: usize> InlineVec<T, N> {
         iter.as_slice()
     }
 
-    pub fn resize(&mut self, len: usize, value: T) -> Option<()>
+    pub fn resize(&mut self, len: usize, value: T) -> Result<Option<T>, Error<T>>
     where
         T: Clone,
     {
         if len > N {
-            return None;
+            let error = unsafe { Error::capacity_overflow::<N>(Some(len), value) };
+            return Err(error);
         }
         if len <= self.len {
             self.truncate(len);
-            return Some(());
+            return Ok(Some(value));
         }
         let last = len - 1;
         for index in self.len..last {
@@ -203,19 +220,20 @@ impl<T, const N: usize> InlineVec<T, N> {
             self.buf.write(last, value);
         }
         self.len += 1;
-        Some(())
+        Ok(None)
     }
 
-    pub fn resize_with<F>(&mut self, len: usize, mut f: F) -> Option<()>
+    pub fn resize_with<F>(&mut self, len: usize, mut f: F) -> Result<(), Error>
     where
         F: FnMut(usize) -> T,
     {
         if len > N {
-            return None;
+            let error = unsafe { Error::capacity_overflow::<N>(Some(len), ()) };
+            return Err(error);
         }
         if len <= self.len {
             self.truncate(len);
-            return Some(());
+            return Ok(());
         }
         for index in self.len..len {
             let value = f(index);
@@ -224,11 +242,11 @@ impl<T, const N: usize> InlineVec<T, N> {
             }
             self.len += 1;
         }
-        Some(())
+        Ok(())
     }
 
     pub fn truncate(&mut self, len: usize) {
-        if len > self.len {
+        if len >= self.len {
             return;
         }
         let to_drop = len..self.len;
@@ -238,34 +256,59 @@ impl<T, const N: usize> InlineVec<T, N> {
         }
     }
 
-    pub fn split_off(&mut self, at: usize) -> Option<Self> {
+    pub const fn split_off(&mut self, at: usize) -> Result<Self, Error> {
         if at > self.len {
-            return None;
+            let upper = UpperBound::Excluded(self.len);
+            let error = Error::index_out_of_bounds(at, upper, ());
+            return Err(error);
         }
-        let mut other = Self::new();
+        let mut result = Self::new();
         let dst_len = self.len - at;
         self.len = at;
-        let src_base = self.as_ptr();
-        let dst_base = other.as_mut_ptr();
         unsafe {
-            let src = src_base.add(at);
-            let dst = dst_base;
-            ptr::copy_nonoverlapping(src, dst, dst_len);
+            let src_index = at;
+            let dst_index = 0;
+            let count = dst_len;
+            buf::copy_nonoverlapping(&self.buf, &mut result.buf, src_index, dst_index, count);
         }
-        other.len = dst_len;
-        Some(other)
+        result.len = dst_len;
+        Ok(result)
+    }
+
+    pub const fn rotate_left(&mut self, n: usize) {
+        if self.len == 0 {
+            return;
+        }
+        let n = n % self.len;
+        self.as_mut_slice().rotate_left(n);
+    }
+
+    pub const fn rotate_right(&mut self, n: usize) {
+        if self.len == 0 {
+            return;
+        }
+        let n = n % self.len;
+        self.as_mut_slice().rotate_right(n);
     }
 
     pub fn spare_capacity_mut(&mut self) -> &mut [MaybeUninit<T>] {
-        unsafe { self.buf.as_uninit_array_mut().get_unchecked_mut(self.len..) }
+        unsafe { self.buf.get_unchecked_mut(self.len..N) }
     }
 
     pub fn clear(&mut self) {
-        let to_drop = ..self.len;
+        let to_drop = 0..self.len;
         self.len = 0;
         unsafe {
             self.buf.assume_init_drop(to_drop);
         }
+    }
+
+    pub(crate) const fn buf(&self) -> &Buf<T, N> {
+        &self.buf
+    }
+
+    pub(crate) const unsafe fn buf_mut(&mut self) -> &mut Buf<T, N> {
+        &mut self.buf
     }
 }
 
@@ -289,15 +332,15 @@ where
     T: Clone,
 {
     fn clone(&self) -> Self {
-        let mut other = Self::new();
+        let mut result = Self::new();
         for (index, value) in self.iter().enumerate() {
             let value = value.clone();
             unsafe {
-                other.buf.write(index, value);
+                result.buf.write(index, value);
             }
-            other.len += 1;
+            result.len += 1;
         }
-        other
+        result
     }
 }
 
@@ -387,6 +430,24 @@ where
     }
 }
 
+impl<T, const N: usize, U, const M: usize> PartialEq<InlineVec<U, M>> for [T; N]
+where
+    T: PartialEq<U>,
+{
+    fn eq(&self, other: &InlineVec<U, M>) -> bool {
+        self.eq(other.as_slice())
+    }
+}
+
+impl<T, U, const M: usize> PartialEq<InlineVec<U, M>> for [T]
+where
+    T: PartialEq<U>,
+{
+    fn eq(&self, other: &InlineVec<U, M>) -> bool {
+        self.eq(other.as_slice())
+    }
+}
+
 impl<T, const N: usize> Eq for InlineVec<T, N> where T: Eq {}
 
 impl<T, const N: usize, U, const M: usize> PartialOrd<InlineVec<U, M>> for InlineVec<T, N>
@@ -421,6 +482,24 @@ where
     T: PartialOrd<U>,
 {
     fn partial_cmp(&self, other: &[U]) -> Option<Ordering> {
+        self.iter().partial_cmp(other)
+    }
+}
+
+impl<T, const N: usize, U, const M: usize> PartialOrd<InlineVec<U, M>> for [T; N]
+where
+    T: PartialOrd<U>,
+{
+    fn partial_cmp(&self, other: &InlineVec<U, M>) -> Option<Ordering> {
+        self.iter().partial_cmp(other)
+    }
+}
+
+impl<T, U, const M: usize> PartialOrd<InlineVec<U, M>> for [T]
+where
+    T: PartialOrd<U>,
+{
+    fn partial_cmp(&self, other: &InlineVec<U, M>) -> Option<Ordering> {
         self.iter().partial_cmp(other)
     }
 }

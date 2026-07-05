@@ -43,22 +43,12 @@ pub struct IntoIter<T, const N: usize> {
 impl<T, const N: usize> IntoIter<T, N> {
     pub fn as_slice(&self) -> &[T] {
         let alive = self.alive();
-        unsafe {
-            self.buf()
-                .as_uninit_array()
-                .get_unchecked(alive)
-                .assume_init_ref()
-        }
+        unsafe { self.buf().assume_init_ref(alive) }
     }
 
     pub fn as_mut_slice(&mut self) -> &mut [T] {
         let alive = self.alive();
-        unsafe {
-            self.buf_mut()
-                .as_uninit_array_mut()
-                .get_unchecked_mut(alive)
-                .assume_init_mut()
-        }
+        unsafe { self.buf_mut().assume_init_mut(alive) }
     }
 
     fn alive(&self) -> Range<usize> {
@@ -71,16 +61,16 @@ impl<T, const N: usize> IntoIter<T, N> {
         self.start
     }
 
-    unsafe fn start_mut(&mut self) -> &mut usize {
-        &mut self.start
+    unsafe fn set_start(&mut self, start: usize) {
+        self.start = start;
     }
 
     fn end(&self) -> usize {
         self.end_and_buf.len
     }
 
-    unsafe fn end_mut(&mut self) -> &mut usize {
-        &mut self.end_and_buf.len
+    unsafe fn set_end(&mut self, end: usize) {
+        self.end_and_buf.len = end;
     }
 
     fn buf(&self) -> &Buf<T, N> {
@@ -107,21 +97,19 @@ where
     T: Clone,
 {
     fn clone(&self) -> Self {
-        let start = 0;
-        let end_and_buf = ManuallyDrop::new(InlineVec::new());
-        let mut other = Self { start, end_and_buf };
+        let mut result = InlineVec::new().into_iter();
         unsafe {
-            *other.start_mut() = self.start();
-            *other.end_mut() = self.start();
+            result.set_start(self.start());
+            result.set_end(self.start());
         }
         for index in self.alive() {
             unsafe {
                 let value = self.buf().assume_init_ref(index).clone();
-                other.buf_mut().write(index, value);
-                *other.end_mut() += 1;
+                result.buf_mut().write(index, value);
+                result.set_end(index + 1);
             }
         }
-        other
+        result
     }
 }
 
@@ -134,7 +122,7 @@ impl<T, const N: usize> Iterator for IntoIter<T, N> {
         }
         let index = self.start();
         unsafe {
-            *self.start_mut() += 1;
+            self.set_start(index + 1);
             Some(self.buf().assume_init_read(index))
         }
     }
@@ -152,7 +140,7 @@ impl<T, const N: usize> Iterator for IntoIter<T, N> {
         if n >= self.len() {
             let to_drop = self.alive();
             unsafe {
-                *self.start_mut() = self.end();
+                self.set_start(self.end());
                 self.buf_mut().assume_init_drop(to_drop);
             }
             return None;
@@ -160,7 +148,7 @@ impl<T, const N: usize> Iterator for IntoIter<T, N> {
         let index = self.start() + n;
         let to_drop = self.start()..index;
         unsafe {
-            *self.start_mut() = index + 1;
+            self.set_start(index + 1);
             self.buf_mut().assume_init_drop(to_drop);
             Some(self.buf().assume_init_read(index))
         }
@@ -177,7 +165,7 @@ impl<T, const N: usize> Iterator for IntoIter<T, N> {
         let mut accum = init;
         for index in self.alive() {
             unsafe {
-                *self.start_mut() += 1;
+                self.set_start(index + 1);
                 let value = self.buf().assume_init_read(index);
                 accum = f(accum, value);
             }
@@ -197,18 +185,18 @@ impl<T, const N: usize> DoubleEndedIterator for IntoIter<T, N> {
         if self.start() == self.end() {
             return None;
         }
+        let index = self.end() - 1;
         unsafe {
-            *self.end_mut() -= 1;
+            self.set_end(index);
+            Some(self.buf().assume_init_read(index))
         }
-        let index = self.end();
-        unsafe { Some(self.buf().assume_init_read(index)) }
     }
 
     fn nth_back(&mut self, n: usize) -> Option<Self::Item> {
         if n >= self.len() {
             let to_drop = self.alive();
             unsafe {
-                *self.end_mut() = self.start();
+                self.set_end(self.start());
                 self.buf_mut().assume_init_drop(to_drop);
             }
             return None;
@@ -216,7 +204,7 @@ impl<T, const N: usize> DoubleEndedIterator for IntoIter<T, N> {
         let to_drop = (self.end() - n)..self.end();
         let index = to_drop.start - 1;
         unsafe {
-            *self.end_mut() = index;
+            self.set_end(index);
             self.buf_mut().assume_init_drop(to_drop);
             Some(self.buf().assume_init_read(index))
         }
@@ -229,7 +217,7 @@ impl<T, const N: usize> DoubleEndedIterator for IntoIter<T, N> {
         let mut accum = init;
         for index in self.alive().into_iter().rev() {
             unsafe {
-                *self.end_mut() -= 1;
+                self.set_end(index);
                 let value = self.buf().assume_init_read(index);
                 accum = f(accum, value);
             }

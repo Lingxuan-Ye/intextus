@@ -2,6 +2,8 @@
 #![no_std]
 
 pub mod deque;
+pub mod error;
+pub mod string;
 pub mod vec;
 
 mod buf;

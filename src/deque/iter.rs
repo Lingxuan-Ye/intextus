@@ -3,6 +3,7 @@ use core::fmt;
 use core::iter::FusedIterator;
 use core::mem;
 use core::ops::RangeBounds;
+use core::range::Range;
 use core::slice;
 
 impl<T, const N: usize> InlineDeque<T, N> {
@@ -101,8 +102,8 @@ where
 
 impl<T> Default for Iter<'_, T> {
     fn default() -> Self {
-        let prefix = Default::default();
-        let suffix = Default::default();
+        let prefix = slice::Iter::default();
+        let suffix = slice::Iter::default();
         Self { prefix, suffix }
     }
 }
@@ -155,7 +156,7 @@ impl<T> ExactSizeIterator for Iter<'_, T> {
     }
 }
 
-impl<'a, T> DoubleEndedIterator for Iter<'a, T> {
+impl<T> DoubleEndedIterator for Iter<'_, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
         if let Some(item) = self.suffix.next_back() {
             Some(item)
@@ -202,8 +203,8 @@ where
 
 impl<T> Default for IterMut<'_, T> {
     fn default() -> Self {
-        let prefix = Default::default();
-        let suffix = Default::default();
+        let prefix = slice::IterMut::default();
+        let suffix = slice::IterMut::default();
         Self { prefix, suffix }
     }
 }
@@ -248,7 +249,7 @@ impl<T> ExactSizeIterator for IterMut<'_, T> {
     }
 }
 
-impl<'a, T> DoubleEndedIterator for IterMut<'a, T> {
+impl<T> DoubleEndedIterator for IterMut<'_, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
         if let Some(item) = self.suffix.next_back() {
             Some(item)
@@ -313,6 +314,16 @@ impl<T, const N: usize> Iterator for IntoIter<T, N> {
         self.len()
     }
 
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        if n >= self.len() {
+            self.deque.truncate_front(0);
+            return None;
+        }
+        let len = self.len();
+        self.deque.truncate_front(len - n);
+        self.deque.pop_front()
+    }
+
     fn last(mut self) -> Option<Self::Item> {
         self.next_back()
     }
@@ -321,18 +332,20 @@ impl<T, const N: usize> Iterator for IntoIter<T, N> {
     where
         F: FnMut(B, Self::Item) -> B,
     {
-        let mut deque = self.deque;
-        let (prefix, suffix) = deque.slice_ranges();
-        deque.head = 0;
-        deque.len = 0;
         let mut accum = init;
-        for index in prefix {
+        let mut deque = self.deque;
+        let (prefix, suffix) = deque.slice_spans();
+        for index in Range::from(prefix) {
+            deque.head = index + 1;
+            deque.len -= 1;
             unsafe {
                 let value = deque.buf.assume_init_read(index);
                 accum = f(accum, value);
             }
         }
-        for index in suffix {
+        for index in Range::from(suffix) {
+            deque.head = index + 1;
+            deque.len -= 1;
             unsafe {
                 let value = deque.buf.assume_init_read(index);
                 accum = f(accum, value);
@@ -353,22 +366,32 @@ impl<T, const N: usize> DoubleEndedIterator for IntoIter<T, N> {
         self.deque.pop_back()
     }
 
+    fn nth_back(&mut self, n: usize) -> Option<Self::Item> {
+        if n >= self.len() {
+            self.deque.truncate(0);
+            return None;
+        }
+        let len = self.len();
+        self.deque.truncate(len - n);
+        self.deque.pop_back()
+    }
+
     fn rfold<B, F>(self, init: B, mut f: F) -> B
     where
         F: FnMut(B, Self::Item) -> B,
     {
-        let mut deque = self.deque;
-        let (prefix, suffix) = deque.slice_ranges();
-        deque.head = 0;
-        deque.len = 0;
         let mut accum = init;
-        for index in suffix.into_iter().rev() {
+        let mut deque = self.deque;
+        let (prefix, suffix) = deque.slice_spans();
+        for index in Range::from(suffix).into_iter().rev() {
+            deque.len -= 1;
             unsafe {
                 let value = deque.buf.assume_init_read(index);
                 accum = f(accum, value);
             }
         }
-        for index in prefix.into_iter().rev() {
+        for index in Range::from(prefix).into_iter().rev() {
+            deque.len -= 1;
             unsafe {
                 let value = deque.buf.assume_init_read(index);
                 accum = f(accum, value);
