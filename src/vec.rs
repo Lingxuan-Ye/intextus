@@ -256,6 +256,22 @@ impl<T, const N: usize> InlineVec<T, N> {
         Some(result)
     }
 
+    pub const fn rotate_left(&mut self, n: usize) {
+        if self.len == 0 {
+            return;
+        }
+        let n = n % self.len;
+        self.as_mut_slice().rotate_left(n);
+    }
+
+    pub const fn rotate_right(&mut self, n: usize) {
+        if self.len == 0 {
+            return;
+        }
+        let n = n % self.len;
+        self.as_mut_slice().rotate_right(n);
+    }
+
     pub fn spare_capacity_mut(&mut self) -> &mut [MaybeUninit<T>] {
         unsafe { self.buf.get_unchecked_mut(self.len..N) }
     }
