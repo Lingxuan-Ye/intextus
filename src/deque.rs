@@ -647,10 +647,11 @@ impl<T, const N: usize> InlineDeque<T, N> {
         Some(result)
     }
 
-    pub const fn rotate_left(&mut self, n: usize) -> Option<()> {
-        if n > self.len {
-            return None;
+    pub const fn rotate_left(&mut self, n: usize) {
+        if self.len == 0 {
+            return;
         }
+        let n = n % self.len;
         let prefix_len = n;
         let suffix_len = self.len - n;
         if prefix_len <= suffix_len {
@@ -666,13 +667,13 @@ impl<T, const N: usize> InlineDeque<T, N> {
                 self.buf.wrap_copy_within(tail, self.head, suffix_len);
             }
         }
-        Some(())
     }
 
-    pub const fn rotate_right(&mut self, n: usize) -> Option<()> {
-        if n > self.len {
-            return None;
+    pub const fn rotate_right(&mut self, n: usize) {
+        if self.len == 0 {
+            return;
         }
+        let n = n % self.len;
         let prefix_len = self.len - n;
         let suffix_len = n;
         if suffix_len <= prefix_len {
@@ -688,7 +689,6 @@ impl<T, const N: usize> InlineDeque<T, N> {
             }
             self.head = Buf::<T, N>::wrap_add(self.head, prefix_len);
         }
-        Some(())
     }
 
     pub fn binary_search(&self, value: &T) -> Result<usize, usize>
