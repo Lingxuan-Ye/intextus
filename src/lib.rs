@@ -9,4 +9,5 @@ pub mod vec;
 mod buf;
 
 pub use self::deque::InlineDeque;
+pub use self::string::InlineString;
 pub use self::vec::InlineVec;
