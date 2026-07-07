@@ -1,7 +1,6 @@
 use core::char::DecodeUtf16Error;
 use core::error;
 use core::fmt;
-use core::num::NonZero;
 use core::str::Utf8Error;
 
 #[derive(PartialEq, Eq)]
@@ -19,27 +18,15 @@ impl<T> Error<T> {
         self.value
     }
 
+    pub(crate) const fn capacity_overflow(value: T) -> Self {
+        let inner = CapacityOverflow::new();
+        let kind = ErrorKind::CapacityOverflow(inner);
+        Self { kind, value }
+    }
+
     pub(crate) const fn index_out_of_bounds(index: usize, upper: UpperBound, value: T) -> Self {
         let inner = IndexOutOfBounds::new(index, upper);
         let kind = ErrorKind::IndexOutOfBounds(inner);
-        Self { kind, value }
-    }
-
-    pub(crate) const fn full<const N: usize>(value: T) -> Self {
-        let inner = CapacityOverflow::full::<N>();
-        let kind = ErrorKind::CapacityOverflow(inner);
-        Self { kind, value }
-    }
-
-    /// The caller must ensure that:
-    ///
-    /// - `len != Some(0)`.
-    pub(crate) const unsafe fn capacity_overflow<const N: usize>(
-        len: Option<usize>,
-        value: T,
-    ) -> Self {
-        let inner = unsafe { CapacityOverflow::new_unchecked::<N>(len) };
-        let kind = ErrorKind::CapacityOverflow(inner);
         Self { kind, value }
     }
 }
@@ -47,8 +34,8 @@ impl<T> Error<T> {
 impl<T> fmt::Debug for Error<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
-            ErrorKind::IndexOutOfBounds(inner) => write!(f, "Error::IndexOutOfBounds({inner:?})"),
             ErrorKind::CapacityOverflow(inner) => write!(f, "Error::CapacityOverflow({inner:?})"),
+            ErrorKind::IndexOutOfBounds(inner) => write!(f, "Error::IndexOutOfBounds({inner:?})"),
         }
     }
 }
@@ -56,8 +43,8 @@ impl<T> fmt::Debug for Error<T> {
 impl<T> fmt::Display for Error<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.kind {
-            ErrorKind::IndexOutOfBounds(inner) => write!(f, "{inner}"),
             ErrorKind::CapacityOverflow(inner) => write!(f, "{inner}"),
+            ErrorKind::IndexOutOfBounds(inner) => write!(f, "{inner}"),
         }
     }
 }
@@ -66,15 +53,15 @@ impl<T> error::Error for Error<T> {}
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
-    IndexOutOfBounds(IndexOutOfBounds),
     CapacityOverflow(CapacityOverflow),
+    IndexOutOfBounds(IndexOutOfBounds),
 }
 
 impl fmt::Debug for ErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::IndexOutOfBounds(_) => write!(f, "ErrorKind::IndexOutOfBounds"),
             Self::CapacityOverflow(_) => write!(f, "ErrorKind::CapacityOverflow"),
+            Self::IndexOutOfBounds(_) => write!(f, "ErrorKind::IndexOutOfBounds"),
         }
     }
 }
@@ -83,23 +70,25 @@ impl fmt::Debug for ErrorKind {
 pub enum StringError {
     Utf8Error(Utf8Error),
     Utf16Error(DecodeUtf16Error),
-    NotCharBoundary(usize),
-    IndexOutOfBounds(IndexOutOfBounds),
     CapacityOverflow(CapacityOverflow),
+    IndexOutOfBounds(IndexOutOfBounds),
+    NotCharBoundary(NotCharBoundary),
 }
 
 impl StringError {
+    pub(crate) const fn capacity_overflow() -> Self {
+        let inner = CapacityOverflow::new();
+        Self::CapacityOverflow(inner)
+    }
+
     pub(crate) const fn index_out_of_bounds(index: usize, upper: UpperBound) -> Self {
         let inner = IndexOutOfBounds::new(index, upper);
         Self::IndexOutOfBounds(inner)
     }
 
-    /// The caller must ensure that:
-    ///
-    /// - `len != Some(0)`.
-    pub(crate) const unsafe fn capacity_overflow<const N: usize>(len: Option<usize>) -> Self {
-        let inner = unsafe { CapacityOverflow::new_unchecked::<N>(len) };
-        Self::CapacityOverflow(inner)
+    pub(crate) const fn not_char_boundary(index: usize) -> Self {
+        let inner = NotCharBoundary::new(index);
+        Self::NotCharBoundary(inner)
     }
 }
 
@@ -108,14 +97,31 @@ impl fmt::Display for StringError {
         match self {
             Self::Utf8Error(inner) => write!(f, "{inner}"),
             Self::Utf16Error(inner) => write!(f, "{inner}"),
-            Self::NotCharBoundary(index) => write!(f, "index {index} is not a char boundary"),
-            Self::IndexOutOfBounds(inner) => write!(f, "{inner}"),
             Self::CapacityOverflow(inner) => write!(f, "{inner}"),
+            Self::IndexOutOfBounds(inner) => write!(f, "{inner}"),
+            Self::NotCharBoundary(inner) => write!(f, "{inner}"),
         }
     }
 }
 
 impl error::Error for StringError {}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CapacityOverflow(());
+
+impl CapacityOverflow {
+    pub(crate) const fn new() -> Self {
+        Self(())
+    }
+}
+
+impl fmt::Display for CapacityOverflow {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "capacity overflow")
+    }
+}
+
+impl error::Error for CapacityOverflow {}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IndexOutOfBounds {
@@ -159,49 +165,24 @@ pub(crate) enum UpperBound {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CapacityOverflow {
-    len: Option<NonZero<usize>>,
-    capacity: usize,
+pub struct NotCharBoundary {
+    index: usize,
 }
 
-impl CapacityOverflow {
-    pub(crate) const fn full<const N: usize>() -> Self {
-        let len = N.checked_add(1);
-        unsafe { Self::new_unchecked::<N>(len) }
-    }
-
-    /// The caller must ensure that:
-    ///
-    /// - `len != Some(0)`.
-    pub(crate) const unsafe fn new_unchecked<const N: usize>(len: Option<usize>) -> Self {
-        let len = match len {
-            None => None,
-            Some(len) => unsafe { Some(NonZero::new_unchecked(len)) },
-        };
-        let capacity = N;
-        Self { len, capacity }
+impl NotCharBoundary {
+    pub(crate) const fn new(index: usize) -> Self {
+        Self { index }
     }
 }
 
-impl fmt::Display for CapacityOverflow {
+impl fmt::Display for NotCharBoundary {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.len {
-            None => {
-                write!(
-                    f,
-                    "capacity overflow: the resulting len would be greater than usize::MAX",
-                )
-            }
-            Some(len) => {
-                write!(
-                    f,
-                    "capacity overflow: the resulting len would be {len}, but the capacity is {capacity}",
-                    len = len.get(),
-                    capacity = self.capacity,
-                )
-            }
-        }
+        write!(
+            f,
+            "index {index} is not a char boundary",
+            index = self.index,
+        )
     }
 }
 
-impl error::Error for CapacityOverflow {}
+impl error::Error for NotCharBoundary {}

@@ -123,7 +123,7 @@ impl<T, const N: usize> InlineDeque<T, N> {
 
     pub fn push_front_mut(&mut self, value: T) -> Result<&mut T, Error<T>> {
         if self.len == N {
-            let error = Error::full::<N>(value);
+            let error = Error::capacity_overflow(value);
             return Err(error);
         }
         let index = Buf::<T, N>::wrap_sub(self.head, 1);
@@ -139,7 +139,7 @@ impl<T, const N: usize> InlineDeque<T, N> {
 
     pub fn push_back_mut(&mut self, value: T) -> Result<&mut T, Error<T>> {
         if self.len == N {
-            let error = Error::full::<N>(value);
+            let error = Error::capacity_overflow(value);
             return Err(error);
         }
         let index = Buf::<T, N>::wrap_add(self.head, self.len);
@@ -202,7 +202,7 @@ impl<T, const N: usize> InlineDeque<T, N> {
             return Err(error);
         }
         if self.len == N {
-            let error = Error::full::<N>(value);
+            let error = Error::capacity_overflow(value);
             return Err(error);
         }
         let prefix_len = index;
@@ -450,7 +450,7 @@ impl<T, const N: usize> InlineDeque<T, N> {
         T: Clone,
     {
         if len > N {
-            let error = unsafe { Error::capacity_overflow::<N>(Some(len), value) };
+            let error = Error::capacity_overflow(value);
             return Err(error);
         }
         if len <= self.len {
@@ -516,7 +516,7 @@ impl<T, const N: usize> InlineDeque<T, N> {
         F: FnMut(usize) -> T,
     {
         if len > N {
-            let error = unsafe { Error::capacity_overflow::<N>(Some(len), ()) };
+            let error = Error::capacity_overflow(());
             return Err(error);
         }
         if len <= self.len {
