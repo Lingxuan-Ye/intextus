@@ -11,7 +11,7 @@ impl<T, const N: usize, const M: usize> TryFrom<InlineVec<T, M>> for InlineDeque
     fn try_from(value: InlineVec<T, M>) -> Result<Self, Self::Error> {
         let len = value.len();
         if len > N {
-            let error = unsafe { Error::capacity_overflow::<N>(Some(len), value) };
+            let error = Error::capacity_overflow(value);
             return Err(error);
         }
         let value = ManuallyDrop::new(value);
@@ -33,7 +33,7 @@ impl<const N: usize, const M: usize> TryFrom<InlineString<M>> for InlineDeque<u8
     fn try_from(value: InlineString<M>) -> Result<Self, Self::Error> {
         let len = value.len();
         if len > N {
-            let error = unsafe { Error::capacity_overflow::<N>(Some(len), value) };
+            let error = Error::capacity_overflow(value);
             return Err(error);
         }
         let mut result = Self::new();

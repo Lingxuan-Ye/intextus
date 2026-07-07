@@ -16,6 +16,9 @@ use core::slice::SliceIndex;
 mod convert;
 mod iter;
 
+#[cfg(feature = "serde")]
+mod serde;
+
 pub struct InlineVec<T, const N: usize> {
     len: usize,
     buf: Buf<T, N>,
@@ -72,7 +75,7 @@ impl<T, const N: usize> InlineVec<T, N> {
 
     pub fn push_mut(&mut self, value: T) -> Result<&mut T, Error<T>> {
         if self.len == N {
-            let error = Error::full::<N>(value);
+            let error = Error::capacity_overflow(value);
             return Err(error);
         }
         let index = self.len;
@@ -109,7 +112,7 @@ impl<T, const N: usize> InlineVec<T, N> {
             return Err(error);
         }
         if self.len == N {
-            let error = Error::full::<N>(value);
+            let error = Error::capacity_overflow(value);
             return Err(error);
         }
         if index != self.len {
@@ -201,7 +204,7 @@ impl<T, const N: usize> InlineVec<T, N> {
         T: Clone,
     {
         if len > N {
-            let error = unsafe { Error::capacity_overflow::<N>(Some(len), value) };
+            let error = Error::capacity_overflow(value);
             return Err(error);
         }
         if len <= self.len {
@@ -228,7 +231,7 @@ impl<T, const N: usize> InlineVec<T, N> {
         F: FnMut(usize) -> T,
     {
         if len > N {
-            let error = unsafe { Error::capacity_overflow::<N>(Some(len), ()) };
+            let error = Error::capacity_overflow(());
             return Err(error);
         }
         if len <= self.len {

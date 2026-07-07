@@ -9,6 +9,9 @@ use core::slice::SliceIndex;
 
 mod convert;
 
+#[cfg(feature = "serde")]
+mod serde;
+
 #[derive(Clone, Default, Hash, Eq, Ord)]
 pub struct InlineString<const N: usize> {
     vec: InlineVec<u8, N>,
@@ -104,11 +107,11 @@ impl<const N: usize> InlineString<N> {
         let len = self.vec.len();
         let char_len = char.len_utf8();
         let Some(new_len) = len.checked_add(char_len) else {
-            let error = unsafe { StringError::capacity_overflow::<N>(None) };
+            let error = StringError::capacity_overflow();
             return Err(error);
         };
         if new_len > N {
-            let error = unsafe { StringError::capacity_overflow::<N>(Some(new_len)) };
+            let error = StringError::capacity_overflow();
             return Err(error);
         }
         let mut buf = [0; char::MAX_LEN_UTF8];
@@ -127,11 +130,11 @@ impl<const N: usize> InlineString<N> {
         let len = self.vec.len();
         let string_len = string.len();
         let Some(new_len) = len.checked_add(string_len) else {
-            let error = unsafe { StringError::capacity_overflow::<N>(None) };
+            let error = StringError::capacity_overflow();
             return Err(error);
         };
         if new_len > N {
-            let error = unsafe { StringError::capacity_overflow::<N>(Some(new_len)) };
+            let error = StringError::capacity_overflow();
             return Err(error);
         }
         unsafe {
@@ -156,17 +159,17 @@ impl<const N: usize> InlineString<N> {
 
     pub const fn insert(&mut self, index: usize, char: char) -> Result<(), StringError> {
         if !self.as_str().is_char_boundary(index) {
-            let error = StringError::NotCharBoundary(index);
+            let error = StringError::not_char_boundary(index);
             return Err(error);
         }
         let len = self.vec.len();
         let char_len = char.len_utf8();
         let Some(new_len) = len.checked_add(char_len) else {
-            let error = unsafe { StringError::capacity_overflow::<N>(None) };
+            let error = StringError::capacity_overflow();
             return Err(error);
         };
         if new_len > N {
-            let error = unsafe { StringError::capacity_overflow::<N>(Some(new_len)) };
+            let error = StringError::capacity_overflow();
             return Err(error);
         }
         if index != len {
@@ -190,17 +193,17 @@ impl<const N: usize> InlineString<N> {
 
     pub const fn insert_str(&mut self, index: usize, string: &str) -> Result<(), StringError> {
         if !self.as_str().is_char_boundary(index) {
-            let error = StringError::NotCharBoundary(index);
+            let error = StringError::not_char_boundary(index);
             return Err(error);
         }
         let len = self.vec.len();
         let string_len = string.len();
         let Some(new_len) = len.checked_add(string_len) else {
-            let error = unsafe { StringError::capacity_overflow::<N>(None) };
+            let error = StringError::capacity_overflow();
             return Err(error);
         };
         if new_len > N {
-            let error = unsafe { StringError::capacity_overflow::<N>(Some(new_len)) };
+            let error = StringError::capacity_overflow();
             return Err(error);
         }
         if index != len {
@@ -243,7 +246,7 @@ impl<const N: usize> InlineString<N> {
             return Ok(());
         }
         if !self.as_str().is_char_boundary(len) {
-            let error = StringError::NotCharBoundary(len);
+            let error = StringError::not_char_boundary(len);
             return Err(error);
         }
         self.vec.truncate(len);
@@ -252,7 +255,7 @@ impl<const N: usize> InlineString<N> {
 
     pub fn split_off(&mut self, at: usize) -> Result<Self, StringError> {
         if !self.as_str().is_char_boundary(at) {
-            let error = StringError::NotCharBoundary(at);
+            let error = StringError::not_char_boundary(at);
             return Err(error);
         }
         let len = self.vec.len();
