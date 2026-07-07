@@ -9,6 +9,9 @@ use core::slice::SliceIndex;
 
 mod convert;
 
+#[cfg(feature = "serde")]
+mod serde;
+
 #[derive(Clone, Default, Hash, Eq, Ord)]
 pub struct InlineString<const N: usize> {
     vec: InlineVec<u8, N>,

@@ -16,6 +16,9 @@ use core::slice::SliceIndex;
 mod convert;
 mod iter;
 
+#[cfg(feature = "serde")]
+mod serde;
+
 pub struct InlineVec<T, const N: usize> {
     len: usize,
     buf: Buf<T, N>,

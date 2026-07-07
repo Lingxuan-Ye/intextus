@@ -13,6 +13,9 @@ use core::slice;
 mod convert;
 mod iter;
 
+#[cfg(feature = "serde")]
+mod serde;
+
 pub struct InlineDeque<T, const N: usize> {
     /// Invariant: `head == 0 || head < N`.
     head: usize,
