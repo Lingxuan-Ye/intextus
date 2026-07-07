@@ -4,6 +4,28 @@ use crate::deque::InlineDeque;
 use crate::error::Error;
 use crate::string::InlineString;
 use core::mem::ManuallyDrop;
+use core::ptr;
+
+impl<T, const N: usize, const M: usize> TryFrom<[T; M]> for InlineVec<T, N> {
+    type Error = Error<[T; M]>;
+
+    fn try_from(value: [T; M]) -> Result<Self, Self::Error> {
+        if M > N {
+            let error = Error::capacity_overflow(value);
+            return Err(error);
+        }
+        let value = ManuallyDrop::new(value);
+        let mut result = Self::new();
+        unsafe {
+            let src = value.as_ptr();
+            let dst = result.as_mut_ptr();
+            let count = M;
+            ptr::copy_nonoverlapping(src, dst, count);
+        }
+        result.len = M;
+        Ok(result)
+    }
+}
 
 impl<T, const N: usize, const M: usize> TryFrom<InlineDeque<T, M>> for InlineVec<T, N> {
     type Error = Error<InlineDeque<T, M>>;
