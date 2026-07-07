@@ -1,8 +1,18 @@
 use super::InlineString;
 use crate::buf;
 use crate::deque::InlineDeque;
-use crate::error::Error;
+use crate::error::{Error, StringError};
 use crate::vec::InlineVec;
+
+impl<const N: usize> TryFrom<&str> for InlineString<N> {
+    type Error = StringError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let mut result = Self::new();
+        result.push_str(value)?;
+        Ok(result)
+    }
+}
 
 impl<const N: usize, const M: usize> TryFrom<InlineVec<u8, M>> for InlineString<N> {
     type Error = Error<InlineVec<u8, M>>;

@@ -36,9 +36,7 @@ impl<'de, const N: usize> Visitor<'de> for InlineStringVisitor<N> {
     where
         E: Error,
     {
-        let mut result = InlineString::<N>::new();
-        result.push_str(value).map_err(E::custom)?;
-        Ok(result)
+        InlineString::<N>::try_from(value).map_err(E::custom)
     }
 
     fn visit_bytes<E>(self, value: &[u8]) -> Result<Self::Value, E>
