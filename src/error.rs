@@ -33,10 +33,9 @@ impl<T> Error<T> {
 
 impl<T> fmt::Debug for Error<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.kind {
-            ErrorKind::CapacityOverflow(inner) => write!(f, "Error::CapacityOverflow({inner:?})"),
-            ErrorKind::IndexOutOfBounds(inner) => write!(f, "Error::IndexOutOfBounds({inner:?})"),
-        }
+        f.debug_struct("Error")
+            .field("kind", &self.kind)
+            .finish_non_exhaustive()
     }
 }
 
@@ -60,13 +59,13 @@ pub enum ErrorKind {
 impl fmt::Debug for ErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::CapacityOverflow(_) => write!(f, "ErrorKind::CapacityOverflow"),
-            Self::IndexOutOfBounds(_) => write!(f, "ErrorKind::IndexOutOfBounds"),
+            Self::CapacityOverflow(inner) => write!(f, "{inner:?}"),
+            Self::IndexOutOfBounds(inner) => write!(f, "{inner:?}"),
         }
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub enum StringError {
     Utf8Error(Utf8Error),
     Utf16Error(DecodeUtf16Error),
@@ -92,6 +91,18 @@ impl StringError {
     }
 }
 
+impl fmt::Debug for StringError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Utf8Error(inner) => write!(f, "{inner:?}"),
+            Self::Utf16Error(inner) => write!(f, "{inner:?}"),
+            Self::CapacityOverflow(inner) => write!(f, "{inner:?}"),
+            Self::IndexOutOfBounds(inner) => write!(f, "{inner:?}"),
+            Self::NotCharBoundary(inner) => write!(f, "{inner:?}"),
+        }
+    }
+}
+
 impl fmt::Display for StringError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -106,12 +117,18 @@ impl fmt::Display for StringError {
 
 impl error::Error for StringError {}
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub struct CapacityOverflow(());
 
 impl CapacityOverflow {
     pub(crate) const fn new() -> Self {
         Self(())
+    }
+}
+
+impl fmt::Debug for CapacityOverflow {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CapacityOverflow").finish_non_exhaustive()
     }
 }
 
