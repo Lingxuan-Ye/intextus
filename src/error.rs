@@ -10,8 +10,8 @@ pub struct Error<T = ()> {
 }
 
 impl<T> Error<T> {
-    pub const fn kind(&self) -> ErrorKind {
-        self.kind
+    pub const fn kind(&self) -> &ErrorKind {
+        &self.kind
     }
 
     pub fn into_inner(self) -> T {
@@ -33,7 +33,7 @@ impl<T> Error<T> {
 
 impl<T> fmt::Debug for Error<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.kind {
+        match &self.kind {
             ErrorKind::CapacityOverflow(inner) => write!(f, "Error::CapacityOverflow({inner:?})"),
             ErrorKind::IndexOutOfBounds(inner) => write!(f, "Error::IndexOutOfBounds({inner:?})"),
         }
@@ -42,7 +42,7 @@ impl<T> fmt::Debug for Error<T> {
 
 impl<T> fmt::Display for Error<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.kind {
+        match &self.kind {
             ErrorKind::CapacityOverflow(inner) => write!(f, "{inner}"),
             ErrorKind::IndexOutOfBounds(inner) => write!(f, "{inner}"),
         }
@@ -51,7 +51,7 @@ impl<T> fmt::Display for Error<T> {
 
 impl<T> error::Error for Error<T> {}
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub enum ErrorKind {
     CapacityOverflow(CapacityOverflow),
     IndexOutOfBounds(IndexOutOfBounds),
@@ -106,7 +106,7 @@ impl fmt::Display for StringError {
 
 impl error::Error for StringError {}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct CapacityOverflow(());
 
 impl CapacityOverflow {
@@ -123,7 +123,7 @@ impl fmt::Display for CapacityOverflow {
 
 impl error::Error for CapacityOverflow {}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct IndexOutOfBounds {
     index: usize,
     upper: UpperBound,
@@ -158,13 +158,13 @@ impl fmt::Display for IndexOutOfBounds {
 
 impl error::Error for IndexOutOfBounds {}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum UpperBound {
     Included(usize),
     Excluded(usize),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct NotCharBoundary {
     index: usize,
 }
