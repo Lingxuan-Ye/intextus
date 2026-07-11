@@ -1,5 +1,6 @@
+use crate::buf;
 use crate::buf::Buf;
-use crate::error::{StringError, UpperBound};
+use crate::error::StringError;
 use crate::vec::InlineVec;
 use core::borrow::{Borrow, BorrowMut};
 use core::cmp::Ordering;
@@ -35,13 +36,12 @@ impl<const N: usize> InlineString<N> {
     }
 
     pub fn from_utf8_lossy(bytes: &[u8]) -> Result<Self, StringError> {
-        const REPLACEMENT: &str = "\u{FFFD}";
         let mut result = Self::new();
         for chunk in bytes.utf8_chunks() {
             let valid = chunk.valid();
             result.push_str(valid)?;
             if !chunk.invalid().is_empty() {
-                result.push_str(REPLACEMENT)?;
+                result.push(char::REPLACEMENT_CHARACTER)?;
             }
         }
         Ok(result)
@@ -106,22 +106,13 @@ impl<const N: usize> InlineString<N> {
     pub const fn push(&mut self, char: char) -> Result<(), StringError> {
         let len = self.vec.len();
         let char_len = char.len_utf8();
-        let Some(new_len) = len.checked_add(char_len) else {
-            let error = StringError::capacity_overflow();
-            return Err(error);
-        };
-        if new_len > N {
+        if N - len < char_len {
             let error = StringError::capacity_overflow();
             return Err(error);
         }
-        let mut buf = [0; char::MAX_LEN_UTF8];
-        char.encode_utf8(&mut buf);
         unsafe {
-            self.vec
-                .as_mut_ptr()
-                .add(len)
-                .copy_from_nonoverlapping(buf.as_ptr(), char_len);
-            self.vec.set_len(new_len);
+            self.write(len, char);
+            self.vec.set_len(len + char_len);
         }
         Ok(())
     }
@@ -129,11 +120,7 @@ impl<const N: usize> InlineString<N> {
     pub const fn push_str(&mut self, string: &str) -> Result<(), StringError> {
         let len = self.vec.len();
         let string_len = string.len();
-        let Some(new_len) = len.checked_add(string_len) else {
-            let error = StringError::capacity_overflow();
-            return Err(error);
-        };
-        if new_len > N {
+        if N - len < string_len {
             let error = StringError::capacity_overflow();
             return Err(error);
         }
@@ -142,7 +129,7 @@ impl<const N: usize> InlineString<N> {
                 .as_mut_ptr()
                 .add(len)
                 .copy_from_nonoverlapping(string.as_ptr(), string_len);
-            self.vec.set_len(new_len);
+            self.vec.set_len(len + string_len);
         }
         Ok(())
     }
@@ -164,11 +151,7 @@ impl<const N: usize> InlineString<N> {
         }
         let len = self.vec.len();
         let char_len = char.len_utf8();
-        let Some(new_len) = len.checked_add(char_len) else {
-            let error = StringError::capacity_overflow();
-            return Err(error);
-        };
-        if new_len > N {
+        if N - len < char_len {
             let error = StringError::capacity_overflow();
             return Err(error);
         }
@@ -179,14 +162,9 @@ impl<const N: usize> InlineString<N> {
                     .copy_within(index, index + char_len, len - index);
             }
         }
-        let mut buf = [0; char::MAX_LEN_UTF8];
-        char.encode_utf8(&mut buf);
         unsafe {
-            self.vec
-                .as_mut_ptr()
-                .add(index)
-                .copy_from_nonoverlapping(buf.as_ptr(), char_len);
-            self.vec.set_len(new_len);
+            self.write(index, char);
+            self.vec.set_len(len + char_len);
         }
         Ok(())
     }
@@ -198,11 +176,7 @@ impl<const N: usize> InlineString<N> {
         }
         let len = self.vec.len();
         let string_len = string.len();
-        let Some(new_len) = len.checked_add(string_len) else {
-            let error = StringError::capacity_overflow();
-            return Err(error);
-        };
-        if new_len > N {
+        if N - len < string_len {
             let error = StringError::capacity_overflow();
             return Err(error);
         }
@@ -218,7 +192,7 @@ impl<const N: usize> InlineString<N> {
                 .as_mut_ptr()
                 .add(index)
                 .copy_from_nonoverlapping(string.as_ptr(), string_len);
-            self.vec.set_len(new_len);
+            self.vec.set_len(len + string_len);
         }
         Ok(())
     }
@@ -258,15 +232,23 @@ impl<const N: usize> InlineString<N> {
             let error = StringError::not_char_boundary(at);
             return Err(error);
         }
-        let len = self.vec.len();
-        if at > len {
-            let upper = UpperBound::Excluded(len);
-            let error = StringError::index_out_of_bounds(at, upper);
-            return Err(error);
+        let mut result = Self::new();
+        let dst_len = self.vec.len() - at;
+        unsafe {
+            self.vec.set_len(at);
+            let src_index = at;
+            let dst_index = 0;
+            let count = dst_len;
+            buf::copy_nonoverlapping(
+                self.vec.buf(),
+                result.vec.buf_mut(),
+                src_index,
+                dst_index,
+                count,
+            );
+            result.vec.set_len(dst_len);
         }
-        let vec = unsafe { self.vec.split_off(at).unwrap_unchecked() };
-        let string = Self { vec };
-        Ok(string)
+        Ok(result)
     }
 
     pub fn clear(&mut self) {
@@ -275,6 +257,37 @@ impl<const N: usize> InlineString<N> {
 
     pub(crate) const fn buf(&self) -> &Buf<u8, N> {
         self.vec.buf()
+    }
+
+    /// # Safety
+    ///
+    /// The caller must ensure that:
+    ///
+    /// - `index` is a char boundary.
+    /// - `index + char.len_utf8() <= N`.
+    pub(crate) const unsafe fn write(&mut self, index: usize, char: char) {
+        let code = char as u32;
+        let dst = unsafe { self.vec.as_mut_ptr().add(index) };
+        match char.len_utf8() {
+            1 => unsafe {
+                *dst = code as u8;
+            },
+            2 => unsafe {
+                *dst = (code >> 6 | 0b1100_0000) as u8;
+                *dst.add(1) = (code & 0b0011_1111 | 0b1000_0000) as u8;
+            },
+            3 => unsafe {
+                *dst = (code >> 12 | 0b1110_0000) as u8;
+                *dst.add(1) = (code >> 6 & 0b0011_1111 | 0b1000_0000) as u8;
+                *dst.add(2) = (code & 0b0011_1111 | 0b1000_0000) as u8;
+            },
+            _ => unsafe {
+                *dst = (code >> 18 | 0b1111_0000) as u8;
+                *dst.add(1) = (code >> 12 & 0b0011_1111 | 0b1000_0000) as u8;
+                *dst.add(2) = (code >> 6 & 0b0011_1111 | 0b1000_0000) as u8;
+                *dst.add(3) = (code & 0b0011_1111 | 0b1000_0000) as u8;
+            },
+        }
     }
 }
 
