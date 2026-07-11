@@ -20,6 +20,8 @@ impl<T, const N: usize> Buf<T, N> {
         self.0.as_mut_ptr().cast()
     }
 
+    /// # Safety
+    ///
     /// The caller must ensure that:
     ///
     /// - `i < N`.
@@ -33,6 +35,8 @@ impl<T, const N: usize> Buf<T, N> {
         }
     }
 
+    /// # Safety
+    ///
     /// The caller must ensure that:
     ///
     /// - `src_index + count <= N`.
@@ -51,6 +55,8 @@ impl<T, const N: usize> Buf<T, N> {
         }
     }
 
+    /// # Safety
+    ///
     /// The caller must ensure that:
     ///
     /// - `src_index + count <= N`.
@@ -71,6 +77,11 @@ impl<T, const N: usize> Buf<T, N> {
         }
     }
 
+    /// # Safety
+    ///
+    /// The caller must ensure that:
+    ///
+    /// - `index` is in bounds.
     pub(crate) unsafe fn get_unchecked<I>(&self, index: I) -> &I::Output
     where
         I: BufIndex<T, N>,
@@ -78,6 +89,11 @@ impl<T, const N: usize> Buf<T, N> {
         unsafe { index.get_unchecked(self) }
     }
 
+    /// # Safety
+    ///
+    /// The caller must ensure that:
+    ///
+    /// - `index` is in bounds.
     pub(crate) unsafe fn get_unchecked_mut<I>(&mut self, index: I) -> &mut I::Output
     where
         I: BufIndex<T, N>,
@@ -85,6 +101,8 @@ impl<T, const N: usize> Buf<T, N> {
         unsafe { index.get_unchecked_mut(self) }
     }
 
+    /// # Safety
+    ///
     /// The caller must ensure that:
     ///
     /// - `index` is in bounds.
@@ -100,10 +118,15 @@ impl<T, const N: usize> Buf<T, N> {
         unsafe { self.get_unchecked_mut(index).write(value) }
     }
 
+    /// # Safety
+    ///
     /// The caller must ensure that:
     ///
     /// - `index` is in bounds.
-    /// - The value at `index` is initialized and valid.
+    /// - The value at `index` is initialized and all additional invariants are
+    ///   satisfied.
+    ///
+    /// After calling this method, the value at `index` is considered uninitialized.
     pub(crate) unsafe fn assume_init_read<'a, I>(
         &'a self,
         index: I,
@@ -115,10 +138,13 @@ impl<T, const N: usize> Buf<T, N> {
         unsafe { self.get_unchecked(index).assume_init_read() }
     }
 
+    /// # Safety
+    ///
     /// The caller must ensure that:
     ///
     /// - `index` is in bounds.
-    /// - The value at `index` is initialized and valid.
+    /// - The value at `index` is initialized and all additional invariants are
+    ///   satisfied.
     pub(crate) unsafe fn assume_init_ref<'a, I>(
         &'a self,
         index: I,
@@ -130,10 +156,13 @@ impl<T, const N: usize> Buf<T, N> {
         unsafe { self.get_unchecked(index).assume_init_ref() }
     }
 
+    /// # Safety
+    ///
     /// The caller must ensure that:
     ///
     /// - `index` is in bounds.
-    /// - The value at `index` is initialized and valid.
+    /// - The value at `index` is initialized and all additional invariants are
+    ///   satisfied.
     pub(crate) unsafe fn assume_init_mut<'a, I>(
         &'a mut self,
         index: I,
@@ -145,10 +174,13 @@ impl<T, const N: usize> Buf<T, N> {
         unsafe { self.get_unchecked_mut(index).assume_init_mut() }
     }
 
+    /// # Safety
+    ///
     /// The caller must ensure that:
     ///
     /// - `index` is in bounds.
-    /// - The slice at `index` is initialized and valid.
+    /// - The value at `index` is initialized and all additional invariants are
+    ///   satisfied.
     pub(crate) unsafe fn assume_init_drop<'a, I>(&'a mut self, index: I)
     where
         I: BufIndex<T, N>,
@@ -161,6 +193,8 @@ impl<T, const N: usize> Buf<T, N> {
 }
 
 impl<T, const N: usize> Buf<T, N> {
+    /// # Safety
+    ///
     /// The caller must ensure that:
     ///
     /// - `src_index < N`.
@@ -446,6 +480,8 @@ impl<T, const N: usize> Buf<T, N> {
     }
 }
 
+/// # Safety
+///
 /// The caller must ensure that:
 ///
 /// - `src_index < N`.
