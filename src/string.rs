@@ -111,13 +111,8 @@ impl<const N: usize> InlineString<N> {
             let error = StringError::capacity_overflow();
             return Err(error);
         }
-        let mut buf = [0; char::MAX_LEN_UTF8];
-        char.encode_utf8(&mut buf);
         unsafe {
-            self.vec
-                .as_mut_ptr()
-                .add(len)
-                .copy_from_nonoverlapping(buf.as_ptr(), char_len);
+            self.write(len, char);
             self.vec.set_len(len + char_len);
         }
         Ok(())
@@ -168,13 +163,8 @@ impl<const N: usize> InlineString<N> {
                     .copy_within(index, index + char_len, len - index);
             }
         }
-        let mut buf = [0; char::MAX_LEN_UTF8];
-        char.encode_utf8(&mut buf);
         unsafe {
-            self.vec
-                .as_mut_ptr()
-                .add(index)
-                .copy_from_nonoverlapping(buf.as_ptr(), char_len);
+            self.write(index, char);
             self.vec.set_len(len + char_len);
         }
         Ok(())
@@ -268,6 +258,37 @@ impl<const N: usize> InlineString<N> {
 
     pub(crate) const fn buf(&self) -> &Buf<u8, N> {
         self.vec.buf()
+    }
+
+    /// # Safety
+    ///
+    /// The caller must ensure that:
+    ///
+    /// - `index` is a char boundary.
+    /// - `index + char.len_utf8() <= N`.
+    pub(crate) const unsafe fn write(&mut self, index: usize, char: char) {
+        let code = char as u32;
+        let dst = unsafe { self.vec.as_mut_ptr().add(index) };
+        match char.len_utf8() {
+            1 => unsafe {
+                *dst = code as u8;
+            },
+            2 => unsafe {
+                *dst = (code >> 6 | 0b1100_0000) as u8;
+                *dst.add(1) = (code & 0b0011_1111 | 0b1000_0000) as u8;
+            },
+            3 => unsafe {
+                *dst = (code >> 12 | 0b1110_0000) as u8;
+                *dst.add(1) = (code >> 6 & 0b0011_1111 | 0b1000_0000) as u8;
+                *dst.add(2) = (code & 0b0011_1111 | 0b1000_0000) as u8;
+            },
+            _ => unsafe {
+                *dst = (code >> 18 | 0b1111_0000) as u8;
+                *dst.add(1) = (code >> 12 & 0b0011_1111 | 0b1000_0000) as u8;
+                *dst.add(2) = (code >> 6 & 0b0011_1111 | 0b1000_0000) as u8;
+                *dst.add(3) = (code & 0b0011_1111 | 0b1000_0000) as u8;
+            },
+        }
     }
 }
 
