@@ -36,13 +36,12 @@ impl<const N: usize> InlineString<N> {
     }
 
     pub fn from_utf8_lossy(bytes: &[u8]) -> Result<Self, StringError> {
-        const REPLACEMENT: &str = "\u{FFFD}";
         let mut result = Self::new();
         for chunk in bytes.utf8_chunks() {
             let valid = chunk.valid();
             result.push_str(valid)?;
             if !chunk.invalid().is_empty() {
-                result.push_str(REPLACEMENT)?;
+                result.push(char::REPLACEMENT_CHARACTER)?;
             }
         }
         Ok(result)
