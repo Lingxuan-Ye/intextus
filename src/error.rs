@@ -70,7 +70,6 @@ pub enum StringError {
     Utf8Error(Utf8Error),
     Utf16Error(DecodeUtf16Error),
     CapacityOverflow(CapacityOverflow),
-    IndexOutOfBounds(IndexOutOfBounds),
     NotCharBoundary(NotCharBoundary),
 }
 
@@ -78,11 +77,6 @@ impl StringError {
     pub(crate) const fn capacity_overflow() -> Self {
         let inner = CapacityOverflow::new();
         Self::CapacityOverflow(inner)
-    }
-
-    pub(crate) const fn index_out_of_bounds(index: usize, upper: UpperBound) -> Self {
-        let inner = IndexOutOfBounds::new(index, upper);
-        Self::IndexOutOfBounds(inner)
     }
 
     pub(crate) const fn not_char_boundary(index: usize) -> Self {
@@ -97,7 +91,6 @@ impl fmt::Debug for StringError {
             Self::Utf8Error(inner) => write!(f, "{inner:?}"),
             Self::Utf16Error(inner) => write!(f, "{inner:?}"),
             Self::CapacityOverflow(inner) => write!(f, "{inner:?}"),
-            Self::IndexOutOfBounds(inner) => write!(f, "{inner:?}"),
             Self::NotCharBoundary(inner) => write!(f, "{inner:?}"),
         }
     }
@@ -109,7 +102,6 @@ impl fmt::Display for StringError {
             Self::Utf8Error(inner) => write!(f, "{inner}"),
             Self::Utf16Error(inner) => write!(f, "{inner}"),
             Self::CapacityOverflow(inner) => write!(f, "{inner}"),
-            Self::IndexOutOfBounds(inner) => write!(f, "{inner}"),
             Self::NotCharBoundary(inner) => write!(f, "{inner}"),
         }
     }
