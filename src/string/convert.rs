@@ -1,81 +1,38 @@
 use super::InlineString;
-use crate::buf;
 use crate::deque::InlineDeque;
-use crate::error::Error;
+use crate::error::StringError;
 use crate::vec::InlineVec;
 
 impl<const N: usize> TryFrom<&str> for InlineString<N> {
-    type Error = Error;
+    type Error = StringError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         let mut result = Self::new();
-        result
-            .push_str(value)
-            .map_err(|_| Error::capacity_overflow(()))?;
+        result.push_str(value)?;
         Ok(result)
     }
 }
 
 impl<const N: usize, const M: usize> TryFrom<InlineVec<u8, M>> for InlineString<N> {
-    type Error = Error<InlineVec<u8, M>>;
+    type Error = StringError<InlineVec<u8, M>>;
 
     fn try_from(value: InlineVec<u8, M>) -> Result<Self, Self::Error> {
-        let len = value.len();
-        if len > N {
-            let error = Error::capacity_overflow(value);
-            return Err(error);
-        }
-        let mut result = Self::new();
-        unsafe {
-            let src_index = 0;
-            let dst_index = 0;
-            let count = len;
-            buf::copy_nonoverlapping(
-                value.buf(),
-                result.vec.buf_mut(),
-                src_index,
-                dst_index,
-                count,
-            );
-            result.vec.set_len(len);
-        }
-        Ok(result)
+        let bytes = value.as_slice();
+        Self::from_utf8(bytes).map_err(|error| error.with_value(value))
     }
 }
 
 impl<const N: usize, const M: usize> TryFrom<InlineDeque<u8, M>> for InlineString<N> {
-    type Error = Error<InlineDeque<u8, M>>;
+    type Error = StringError<InlineDeque<u8, M>>;
 
     fn try_from(value: InlineDeque<u8, M>) -> Result<Self, Self::Error> {
-        let len = value.len();
-        if len > N {
-            let error = Error::capacity_overflow(value);
-            return Err(error);
-        }
-        let (prefix, suffix) = value.slice_spans();
         let mut result = Self::new();
-        unsafe {
-            let src_index = prefix.start;
-            let dst_index = 0;
-            let count = prefix.len;
-            buf::copy_nonoverlapping(
-                value.buf(),
-                result.vec.buf_mut(),
-                src_index,
-                dst_index,
-                count,
-            );
-            let src_index = suffix.start;
-            let dst_index = prefix.len;
-            let count = suffix.len;
-            buf::copy_nonoverlapping(
-                value.buf(),
-                result.vec.buf_mut(),
-                src_index,
-                dst_index,
-                count,
-            );
-            result.vec.set_len(len);
+        let (prefix, suffix) = value.as_slices();
+        if let Err(error) = result.push_utf8(prefix) {
+            return Err(error.with_value(value));
+        }
+        if let Err(error) = result.push_utf8(suffix) {
+            return Err(error.with_value(value));
         }
         Ok(result)
     }

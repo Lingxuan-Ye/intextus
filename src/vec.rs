@@ -75,8 +75,7 @@ impl<T, const N: usize> InlineVec<T, N> {
 
     pub fn push_mut(&mut self, value: T) -> Result<&mut T, Error<T>> {
         if self.len == N {
-            let error = Error::capacity_overflow(value);
-            return Err(error);
+            return Err(Error::capacity_overflow().with_value(value));
         }
         let index = self.len;
         let slot = unsafe { self.buf.write(index, value) };
@@ -108,12 +107,10 @@ impl<T, const N: usize> InlineVec<T, N> {
     pub fn insert_mut(&mut self, index: usize, value: T) -> Result<&mut T, Error<T>> {
         if index > self.len {
             let upper = UpperBound::Included(self.len);
-            let error = Error::index_out_of_bounds(index, upper, value);
-            return Err(error);
+            return Err(Error::index_out_of_bounds(index, upper).with_value(value));
         }
         if self.len == N {
-            let error = Error::capacity_overflow(value);
-            return Err(error);
+            return Err(Error::capacity_overflow().with_value(value));
         }
         if index != self.len {
             unsafe {
@@ -156,13 +153,11 @@ impl<T, const N: usize> InlineVec<T, N> {
     pub const fn swap(&mut self, i: usize, j: usize) -> Result<(), Error> {
         if i >= self.len {
             let upper = UpperBound::Excluded(self.len);
-            let error = Error::index_out_of_bounds(i, upper, ());
-            return Err(error);
+            return Err(Error::index_out_of_bounds(i, upper));
         }
         if j >= self.len {
             let upper = UpperBound::Excluded(self.len);
-            let error = Error::index_out_of_bounds(j, upper, ());
-            return Err(error);
+            return Err(Error::index_out_of_bounds(j, upper));
         }
         unsafe {
             self.buf.swap(i, j);
@@ -204,8 +199,7 @@ impl<T, const N: usize> InlineVec<T, N> {
         T: Clone,
     {
         if len > N {
-            let error = Error::capacity_overflow(value);
-            return Err(error);
+            return Err(Error::capacity_overflow().with_value(value));
         }
         if len <= self.len {
             self.truncate(len);
@@ -231,8 +225,7 @@ impl<T, const N: usize> InlineVec<T, N> {
         F: FnMut(usize) -> T,
     {
         if len > N {
-            let error = Error::capacity_overflow(());
-            return Err(error);
+            return Err(Error::capacity_overflow());
         }
         if len <= self.len {
             self.truncate(len);
@@ -262,8 +255,7 @@ impl<T, const N: usize> InlineVec<T, N> {
     pub const fn split_off(&mut self, at: usize) -> Result<Self, Error> {
         if at > self.len {
             let upper = UpperBound::Excluded(self.len);
-            let error = Error::index_out_of_bounds(at, upper, ());
-            return Err(error);
+            return Err(Error::index_out_of_bounds(at, upper));
         }
         let mut result = Self::new();
         let dst_len = self.len - at;

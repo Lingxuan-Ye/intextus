@@ -25,9 +25,8 @@ impl<const N: usize> InlineString<N> {
     }
 
     pub fn from_utf8(bytes: &[u8]) -> Result<Self, StringError> {
-        let string = str::from_utf8(bytes).map_err(StringError::Utf8Error)?;
         let mut result = Self::new();
-        result.push_str(string)?;
+        result.push_utf8(bytes)?;
         Ok(result)
     }
 
@@ -49,8 +48,8 @@ impl<const N: usize> InlineString<N> {
 
     pub fn from_utf16(bytes: &[u16]) -> Result<Self, StringError> {
         let mut result = Self::new();
-        for char in char::decode_utf16(bytes.iter().cloned()) {
-            let char = char.map_err(StringError::Utf16Error)?;
+        for char in char::decode_utf16(bytes.iter().copied()) {
+            let char = char.map_err(StringError::utf16_error)?;
             result.push(char)?;
         }
         Ok(result)
@@ -58,7 +57,7 @@ impl<const N: usize> InlineString<N> {
 
     pub fn from_utf16_lossy(bytes: &[u16]) -> Result<Self, StringError> {
         let mut result = Self::new();
-        for char in char::decode_utf16(bytes.iter().cloned()) {
+        for char in char::decode_utf16(bytes.iter().copied()) {
             let char = char.unwrap_or(char::REPLACEMENT_CHARACTER);
             result.push(char)?;
         }
@@ -107,8 +106,7 @@ impl<const N: usize> InlineString<N> {
         let len = self.vec.len();
         let char_len = char.len_utf8();
         if N - len < char_len {
-            let error = StringError::capacity_overflow();
-            return Err(error);
+            return Err(StringError::capacity_overflow());
         }
         unsafe {
             self.write(len, char);
@@ -121,8 +119,7 @@ impl<const N: usize> InlineString<N> {
         let len = self.vec.len();
         let string_len = string.len();
         if N - len < string_len {
-            let error = StringError::capacity_overflow();
-            return Err(error);
+            return Err(StringError::capacity_overflow());
         }
         unsafe {
             self.vec
@@ -146,14 +143,12 @@ impl<const N: usize> InlineString<N> {
 
     pub const fn insert(&mut self, index: usize, char: char) -> Result<(), StringError> {
         if !self.as_str().is_char_boundary(index) {
-            let error = StringError::not_char_boundary(index);
-            return Err(error);
+            return Err(StringError::not_char_boundary(index));
         }
         let len = self.vec.len();
         let char_len = char.len_utf8();
         if N - len < char_len {
-            let error = StringError::capacity_overflow();
-            return Err(error);
+            return Err(StringError::capacity_overflow());
         }
         if index != len {
             unsafe {
@@ -171,14 +166,12 @@ impl<const N: usize> InlineString<N> {
 
     pub const fn insert_str(&mut self, index: usize, string: &str) -> Result<(), StringError> {
         if !self.as_str().is_char_boundary(index) {
-            let error = StringError::not_char_boundary(index);
-            return Err(error);
+            return Err(StringError::not_char_boundary(index));
         }
         let len = self.vec.len();
         let string_len = string.len();
         if N - len < string_len {
-            let error = StringError::capacity_overflow();
-            return Err(error);
+            return Err(StringError::capacity_overflow());
         }
         if index != len {
             unsafe {
@@ -220,8 +213,7 @@ impl<const N: usize> InlineString<N> {
             return Ok(());
         }
         if !self.as_str().is_char_boundary(len) {
-            let error = StringError::not_char_boundary(len);
-            return Err(error);
+            return Err(StringError::not_char_boundary(len));
         }
         self.vec.truncate(len);
         Ok(())
@@ -229,8 +221,7 @@ impl<const N: usize> InlineString<N> {
 
     pub fn split_off(&mut self, at: usize) -> Result<Self, StringError> {
         if !self.as_str().is_char_boundary(at) {
-            let error = StringError::not_char_boundary(at);
-            return Err(error);
+            return Err(StringError::not_char_boundary(at));
         }
         let mut result = Self::new();
         let dst_len = self.vec.len() - at;
@@ -287,6 +278,13 @@ impl<const N: usize> InlineString<N> {
                 *dst.add(2) = (code >> 6 & 0b0011_1111 | 0b1000_0000) as u8;
                 *dst.add(3) = (code & 0b0011_1111 | 0b1000_0000) as u8;
             },
+        }
+    }
+
+    const fn push_utf8(&mut self, bytes: &[u8]) -> Result<(), StringError> {
+        match str::from_utf8(bytes) {
+            Err(error) => Err(StringError::utf8_error(error)),
+            Ok(string) => self.push_str(string),
         }
     }
 }

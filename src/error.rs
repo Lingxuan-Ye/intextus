@@ -14,20 +14,29 @@ impl<T> Error<T> {
         &self.kind
     }
 
-    pub fn into_inner(self) -> T {
+    pub fn into_value(self) -> T {
         self.value
     }
+}
 
-    pub(crate) const fn capacity_overflow(value: T) -> Self {
-        let inner = CapacityOverflow::new();
-        let kind = ErrorKind::CapacityOverflow(inner);
+impl Error {
+    pub(crate) const fn capacity_overflow() -> Self {
+        let error = CapacityOverflow::new();
+        let kind = ErrorKind::CapacityOverflow(error);
+        let value = ();
         Self { kind, value }
     }
 
-    pub(crate) const fn index_out_of_bounds(index: usize, upper: UpperBound, value: T) -> Self {
-        let inner = IndexOutOfBounds::new(index, upper);
-        let kind = ErrorKind::IndexOutOfBounds(inner);
+    pub(crate) const fn index_out_of_bounds(index: usize, upper: UpperBound) -> Self {
+        let error = IndexOutOfBounds::new(index, upper);
+        let kind = ErrorKind::IndexOutOfBounds(error);
+        let value = ();
         Self { kind, value }
+    }
+
+    pub(crate) const fn with_value<T>(self, value: T) -> Error<T> {
+        let kind = self.kind;
+        Error { kind, value }
     }
 }
 
@@ -42,8 +51,8 @@ impl<T> fmt::Debug for Error<T> {
 impl<T> fmt::Display for Error<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.kind {
-            ErrorKind::CapacityOverflow(inner) => write!(f, "{inner}"),
-            ErrorKind::IndexOutOfBounds(inner) => write!(f, "{inner}"),
+            ErrorKind::CapacityOverflow(error) => write!(f, "{error}"),
+            ErrorKind::IndexOutOfBounds(error) => write!(f, "{error}"),
         }
     }
 }
@@ -59,55 +68,100 @@ pub enum ErrorKind {
 impl fmt::Debug for ErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::CapacityOverflow(inner) => write!(f, "{inner:?}"),
-            Self::IndexOutOfBounds(inner) => write!(f, "{inner:?}"),
+            Self::CapacityOverflow(error) => write!(f, "{error:?}"),
+            Self::IndexOutOfBounds(error) => write!(f, "{error:?}"),
         }
     }
 }
 
 #[derive(PartialEq, Eq)]
-pub enum StringError {
+pub struct StringError<T = ()> {
+    kind: StringErrorKind,
+    value: T,
+}
+
+impl<T> StringError<T> {
+    pub const fn kind(&self) -> &StringErrorKind {
+        &self.kind
+    }
+
+    pub fn into_value(self) -> T {
+        self.value
+    }
+}
+
+impl StringError {
+    pub(crate) const fn utf8_error(error: Utf8Error) -> Self {
+        let kind = StringErrorKind::Utf8Error(error);
+        let value = ();
+        Self { kind, value }
+    }
+
+    pub(crate) const fn utf16_error(error: DecodeUtf16Error) -> Self {
+        let kind = StringErrorKind::Utf16Error(error);
+        let value = ();
+        Self { kind, value }
+    }
+
+    pub(crate) const fn capacity_overflow() -> Self {
+        let error = CapacityOverflow::new();
+        let kind = StringErrorKind::CapacityOverflow(error);
+        let value = ();
+        Self { kind, value }
+    }
+
+    pub(crate) const fn not_char_boundary(index: usize) -> Self {
+        let error = NotCharBoundary::new(index);
+        let kind = StringErrorKind::NotCharBoundary(error);
+        let value = ();
+        Self { kind, value }
+    }
+
+    pub(crate) const fn with_value<T>(self, value: T) -> StringError<T> {
+        let kind = self.kind;
+        StringError { kind, value }
+    }
+}
+
+impl<T> fmt::Debug for StringError<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StringError")
+            .field("kind", &self.kind)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<T> fmt::Display for StringError<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.kind {
+            StringErrorKind::Utf8Error(error) => write!(f, "{error}"),
+            StringErrorKind::Utf16Error(error) => write!(f, "{error}"),
+            StringErrorKind::CapacityOverflow(error) => write!(f, "{error}"),
+            StringErrorKind::NotCharBoundary(error) => write!(f, "{error}"),
+        }
+    }
+}
+
+impl<T> error::Error for StringError<T> {}
+
+#[derive(PartialEq, Eq)]
+pub enum StringErrorKind {
     Utf8Error(Utf8Error),
     Utf16Error(DecodeUtf16Error),
     CapacityOverflow(CapacityOverflow),
     NotCharBoundary(NotCharBoundary),
 }
 
-impl StringError {
-    pub(crate) const fn capacity_overflow() -> Self {
-        let inner = CapacityOverflow::new();
-        Self::CapacityOverflow(inner)
-    }
-
-    pub(crate) const fn not_char_boundary(index: usize) -> Self {
-        let inner = NotCharBoundary::new(index);
-        Self::NotCharBoundary(inner)
-    }
-}
-
-impl fmt::Debug for StringError {
+impl fmt::Debug for StringErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Utf8Error(inner) => write!(f, "{inner:?}"),
-            Self::Utf16Error(inner) => write!(f, "{inner:?}"),
-            Self::CapacityOverflow(inner) => write!(f, "{inner:?}"),
-            Self::NotCharBoundary(inner) => write!(f, "{inner:?}"),
+            Self::Utf8Error(error) => write!(f, "{error:?}"),
+            Self::Utf16Error(error) => write!(f, "{error:?}"),
+            Self::CapacityOverflow(error) => write!(f, "{error:?}"),
+            Self::NotCharBoundary(error) => write!(f, "{error:?}"),
         }
     }
 }
-
-impl fmt::Display for StringError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Utf8Error(inner) => write!(f, "{inner}"),
-            Self::Utf16Error(inner) => write!(f, "{inner}"),
-            Self::CapacityOverflow(inner) => write!(f, "{inner}"),
-            Self::NotCharBoundary(inner) => write!(f, "{inner}"),
-        }
-    }
-}
-
-impl error::Error for StringError {}
 
 #[derive(PartialEq, Eq)]
 pub struct CapacityOverflow(());
