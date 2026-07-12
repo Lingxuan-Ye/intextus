@@ -11,7 +11,7 @@ impl<const N: usize> TryFrom<&str> for InlineString<N> {
         let mut result = Self::new();
         result
             .push_str(value)
-            .map_err(|_| Error::capacity_overflow(()))?;
+            .map_err(|_| Error::capacity_overflow())?;
         Ok(result)
     }
 }
@@ -22,8 +22,7 @@ impl<const N: usize, const M: usize> TryFrom<InlineVec<u8, M>> for InlineString<
     fn try_from(value: InlineVec<u8, M>) -> Result<Self, Self::Error> {
         let len = value.len();
         if len > N {
-            let error = Error::capacity_overflow(value);
-            return Err(error);
+            return Err(Error::capacity_overflow().with_value(value));
         }
         let mut result = Self::new();
         unsafe {
@@ -49,8 +48,7 @@ impl<const N: usize, const M: usize> TryFrom<InlineDeque<u8, M>> for InlineStrin
     fn try_from(value: InlineDeque<u8, M>) -> Result<Self, Self::Error> {
         let len = value.len();
         if len > N {
-            let error = Error::capacity_overflow(value);
-            return Err(error);
+            return Err(Error::capacity_overflow().with_value(value));
         }
         let (prefix, suffix) = value.slice_spans();
         let mut result = Self::new();
