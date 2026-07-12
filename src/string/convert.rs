@@ -1,28 +1,26 @@
 use super::InlineString;
 use crate::buf;
 use crate::deque::InlineDeque;
-use crate::error::Error;
+use crate::error::StringError;
 use crate::vec::InlineVec;
 
 impl<const N: usize> TryFrom<&str> for InlineString<N> {
-    type Error = Error;
+    type Error = StringError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         let mut result = Self::new();
-        result
-            .push_str(value)
-            .map_err(|_| Error::capacity_overflow())?;
+        result.push_str(value)?;
         Ok(result)
     }
 }
 
 impl<const N: usize, const M: usize> TryFrom<InlineVec<u8, M>> for InlineString<N> {
-    type Error = Error<InlineVec<u8, M>>;
+    type Error = StringError<InlineVec<u8, M>>;
 
     fn try_from(value: InlineVec<u8, M>) -> Result<Self, Self::Error> {
         let len = value.len();
         if len > N {
-            return Err(Error::capacity_overflow().with_value(value));
+            return Err(StringError::capacity_overflow().with_value(value));
         }
         let mut result = Self::new();
         unsafe {
@@ -43,12 +41,12 @@ impl<const N: usize, const M: usize> TryFrom<InlineVec<u8, M>> for InlineString<
 }
 
 impl<const N: usize, const M: usize> TryFrom<InlineDeque<u8, M>> for InlineString<N> {
-    type Error = Error<InlineDeque<u8, M>>;
+    type Error = StringError<InlineDeque<u8, M>>;
 
     fn try_from(value: InlineDeque<u8, M>) -> Result<Self, Self::Error> {
         let len = value.len();
         if len > N {
-            return Err(Error::capacity_overflow().with_value(value));
+            return Err(StringError::capacity_overflow().with_value(value));
         }
         let (prefix, suffix) = value.slice_spans();
         let mut result = Self::new();
