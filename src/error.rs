@@ -51,8 +51,8 @@ impl<T> fmt::Debug for Error<T> {
 impl<T> fmt::Display for Error<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.kind {
-            ErrorKind::CapacityOverflow(error) => write!(f, "{error}"),
-            ErrorKind::IndexOutOfBounds(error) => write!(f, "{error}"),
+            ErrorKind::CapacityOverflow(error) => error.fmt(f),
+            ErrorKind::IndexOutOfBounds(error) => error.fmt(f),
         }
     }
 }
@@ -68,8 +68,8 @@ pub enum ErrorKind {
 impl fmt::Debug for ErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::CapacityOverflow(error) => write!(f, "{error:?}"),
-            Self::IndexOutOfBounds(error) => write!(f, "{error:?}"),
+            Self::CapacityOverflow(error) => error.fmt(f),
+            Self::IndexOutOfBounds(error) => error.fmt(f),
         }
     }
 }
@@ -134,10 +134,10 @@ impl<T> fmt::Debug for StringError<T> {
 impl<T> fmt::Display for StringError<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.kind {
-            StringErrorKind::Utf8Error(error) => write!(f, "{error}"),
-            StringErrorKind::Utf16Error(error) => write!(f, "{error}"),
-            StringErrorKind::CapacityOverflow(error) => write!(f, "{error}"),
-            StringErrorKind::NotCharBoundary(error) => write!(f, "{error}"),
+            StringErrorKind::Utf8Error(error) => error.fmt(f),
+            StringErrorKind::Utf16Error(error) => error.fmt(f),
+            StringErrorKind::CapacityOverflow(error) => error.fmt(f),
+            StringErrorKind::NotCharBoundary(error) => error.fmt(f),
         }
     }
 }
@@ -155,10 +155,10 @@ pub enum StringErrorKind {
 impl fmt::Debug for StringErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Utf8Error(error) => write!(f, "{error:?}"),
-            Self::Utf16Error(error) => write!(f, "{error:?}"),
-            Self::CapacityOverflow(error) => write!(f, "{error:?}"),
-            Self::NotCharBoundary(error) => write!(f, "{error:?}"),
+            Self::Utf8Error(error) => error.fmt(f),
+            Self::Utf16Error(error) => error.fmt(f),
+            Self::CapacityOverflow(error) => error.fmt(f),
+            Self::NotCharBoundary(error) => error.fmt(f),
         }
     }
 }
@@ -180,7 +180,7 @@ impl fmt::Debug for CapacityOverflow {
 
 impl fmt::Display for CapacityOverflow {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "capacity overflow")
+        f.write_str("capacity overflow")
     }
 }
 
