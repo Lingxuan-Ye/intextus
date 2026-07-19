@@ -29,12 +29,48 @@ where
     }
 }
 
+impl<T, const N: usize, U, const M: usize> PartialEq<&[U; M]> for InlineVec<T, N>
+where
+    T: PartialEq<U>,
+{
+    fn eq(&self, other: &&[U; M]) -> bool {
+        self.as_slice().eq(other.as_slice())
+    }
+}
+
+impl<T, const N: usize, U, const M: usize> PartialEq<&mut [U; M]> for InlineVec<T, N>
+where
+    T: PartialEq<U>,
+{
+    fn eq(&self, other: &&mut [U; M]) -> bool {
+        self.as_slice().eq(other.as_slice())
+    }
+}
+
 impl<T, const N: usize, U> PartialEq<[U]> for InlineVec<T, N>
 where
     T: PartialEq<U>,
 {
     fn eq(&self, other: &[U]) -> bool {
         self.as_slice().eq(other)
+    }
+}
+
+impl<T, const N: usize, U> PartialEq<&[U]> for InlineVec<T, N>
+where
+    T: PartialEq<U>,
+{
+    fn eq(&self, other: &&[U]) -> bool {
+        self.as_slice().eq(*other)
+    }
+}
+
+impl<T, const N: usize, U> PartialEq<&mut [U]> for InlineVec<T, N>
+where
+    T: PartialEq<U>,
+{
+    fn eq(&self, other: &&mut [U]) -> bool {
+        self.as_slice().eq(*other)
     }
 }
 
@@ -53,6 +89,24 @@ where
 {
     fn eq(&self, other: &InlineVec<U, M>) -> bool {
         self.eq(other.as_slice())
+    }
+}
+
+impl<T, U, const M: usize> PartialEq<InlineVec<U, M>> for &[T]
+where
+    T: PartialEq<U>,
+{
+    fn eq(&self, other: &InlineVec<U, M>) -> bool {
+        self[..].eq(other.as_slice())
+    }
+}
+
+impl<T, U, const M: usize> PartialEq<InlineVec<U, M>> for &mut [T]
+where
+    T: PartialEq<U>,
+{
+    fn eq(&self, other: &InlineVec<U, M>) -> bool {
+        self[..].eq(other.as_slice())
     }
 }
 

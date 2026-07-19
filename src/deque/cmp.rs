@@ -29,12 +29,48 @@ where
     }
 }
 
+impl<T, const N: usize, U, const M: usize> PartialEq<&[U; M]> for InlineDeque<T, N>
+where
+    T: PartialEq<U>,
+{
+    fn eq(&self, other: &&[U; M]) -> bool {
+        self.iter().eq(other.as_slice())
+    }
+}
+
+impl<T, const N: usize, U, const M: usize> PartialEq<&mut [U; M]> for InlineDeque<T, N>
+where
+    T: PartialEq<U>,
+{
+    fn eq(&self, other: &&mut [U; M]) -> bool {
+        self.iter().eq(other.as_slice())
+    }
+}
+
 impl<T, const N: usize, U> PartialEq<[U]> for InlineDeque<T, N>
 where
     T: PartialEq<U>,
 {
     fn eq(&self, other: &[U]) -> bool {
         self.iter().eq(other)
+    }
+}
+
+impl<T, const N: usize, U> PartialEq<&[U]> for InlineDeque<T, N>
+where
+    T: PartialEq<U>,
+{
+    fn eq(&self, other: &&[U]) -> bool {
+        self.iter().eq(other.iter())
+    }
+}
+
+impl<T, const N: usize, U> PartialEq<&mut [U]> for InlineDeque<T, N>
+where
+    T: PartialEq<U>,
+{
+    fn eq(&self, other: &&mut [U]) -> bool {
+        self.iter().eq(other.iter())
     }
 }
 
@@ -48,6 +84,24 @@ where
 }
 
 impl<T, U, const M: usize> PartialEq<InlineDeque<U, M>> for [T]
+where
+    T: PartialEq<U>,
+{
+    fn eq(&self, other: &InlineDeque<U, M>) -> bool {
+        self.iter().eq(other)
+    }
+}
+
+impl<T, U, const M: usize> PartialEq<InlineDeque<U, M>> for &[T]
+where
+    T: PartialEq<U>,
+{
+    fn eq(&self, other: &InlineDeque<U, M>) -> bool {
+        self.iter().eq(other)
+    }
+}
+
+impl<T, U, const M: usize> PartialEq<InlineDeque<U, M>> for &mut [T]
 where
     T: PartialEq<U>,
 {
