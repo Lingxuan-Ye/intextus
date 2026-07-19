@@ -51,6 +51,18 @@ impl<const N: usize, const M: usize> PartialOrd<InlineString<M>> for InlineStrin
     }
 }
 
+impl<const N: usize> PartialOrd<str> for InlineString<N> {
+    fn partial_cmp(&self, other: &str) -> Option<Ordering> {
+        self.as_str().partial_cmp(other)
+    }
+}
+
+impl<const N: usize> PartialOrd<InlineString<N>> for str {
+    fn partial_cmp(&self, other: &InlineString<N>) -> Option<Ordering> {
+        self.partial_cmp(other.as_str())
+    }
+}
+
 impl<const N: usize> Ord for InlineString<N> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.as_str().cmp(other.as_str())
