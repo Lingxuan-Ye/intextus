@@ -112,57 +112,57 @@ where
 
 impl<T, const N: usize> Eq for InlineVec<T, N> where T: Eq {}
 
-impl<T, const N: usize, U, const M: usize> PartialOrd<InlineVec<U, M>> for InlineVec<T, N>
+impl<T, const N: usize, const M: usize> PartialOrd<InlineVec<T, M>> for InlineVec<T, N>
 where
-    T: PartialOrd<U>,
+    T: PartialOrd,
 {
-    fn partial_cmp(&self, other: &InlineVec<U, M>) -> Option<Ordering> {
+    fn partial_cmp(&self, other: &InlineVec<T, M>) -> Option<Ordering> {
+        self.as_slice().partial_cmp(other)
+    }
+}
+
+impl<T, const N: usize, const M: usize> PartialOrd<InlineDeque<T, M>> for InlineVec<T, N>
+where
+    T: PartialOrd,
+{
+    fn partial_cmp(&self, other: &InlineDeque<T, M>) -> Option<Ordering> {
         self.iter().partial_cmp(other)
     }
 }
 
-impl<T, const N: usize, U, const M: usize> PartialOrd<InlineDeque<U, M>> for InlineVec<T, N>
+impl<T, const N: usize, const M: usize> PartialOrd<[T; M]> for InlineVec<T, N>
 where
-    T: PartialOrd<U>,
+    T: PartialOrd,
 {
-    fn partial_cmp(&self, other: &InlineDeque<U, M>) -> Option<Ordering> {
-        self.iter().partial_cmp(other)
+    fn partial_cmp(&self, other: &[T; M]) -> Option<Ordering> {
+        self.as_slice().partial_cmp(other.as_slice())
     }
 }
 
-impl<T, const N: usize, U, const M: usize> PartialOrd<[U; M]> for InlineVec<T, N>
+impl<T, const N: usize> PartialOrd<[T]> for InlineVec<T, N>
 where
-    T: PartialOrd<U>,
+    T: PartialOrd,
 {
-    fn partial_cmp(&self, other: &[U; M]) -> Option<Ordering> {
-        self.iter().partial_cmp(other)
+    fn partial_cmp(&self, other: &[T]) -> Option<Ordering> {
+        self.as_slice().partial_cmp(other)
     }
 }
 
-impl<T, const N: usize, U> PartialOrd<[U]> for InlineVec<T, N>
+impl<T, const N: usize, const M: usize> PartialOrd<InlineVec<T, M>> for [T; N]
 where
-    T: PartialOrd<U>,
+    T: PartialOrd,
 {
-    fn partial_cmp(&self, other: &[U]) -> Option<Ordering> {
-        self.iter().partial_cmp(other)
+    fn partial_cmp(&self, other: &InlineVec<T, M>) -> Option<Ordering> {
+        self.as_slice().partial_cmp(other.as_slice())
     }
 }
 
-impl<T, const N: usize, U, const M: usize> PartialOrd<InlineVec<U, M>> for [T; N]
+impl<T, const N: usize> PartialOrd<InlineVec<T, N>> for [T]
 where
-    T: PartialOrd<U>,
+    T: PartialOrd,
 {
-    fn partial_cmp(&self, other: &InlineVec<U, M>) -> Option<Ordering> {
-        self.iter().partial_cmp(other)
-    }
-}
-
-impl<T, U, const M: usize> PartialOrd<InlineVec<U, M>> for [T]
-where
-    T: PartialOrd<U>,
-{
-    fn partial_cmp(&self, other: &InlineVec<U, M>) -> Option<Ordering> {
-        self.iter().partial_cmp(other)
+    fn partial_cmp(&self, other: &InlineVec<T, N>) -> Option<Ordering> {
+        self.partial_cmp(other.as_slice())
     }
 }
 

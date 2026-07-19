@@ -112,56 +112,56 @@ where
 
 impl<T, const N: usize> Eq for InlineDeque<T, N> where T: Eq {}
 
-impl<T, const N: usize, U, const M: usize> PartialOrd<InlineDeque<U, M>> for InlineDeque<T, N>
+impl<T, const N: usize, const M: usize> PartialOrd<InlineDeque<T, M>> for InlineDeque<T, N>
 where
-    T: PartialOrd<U>,
+    T: PartialOrd,
 {
-    fn partial_cmp(&self, other: &InlineDeque<U, M>) -> Option<Ordering> {
+    fn partial_cmp(&self, other: &InlineDeque<T, M>) -> Option<Ordering> {
         self.iter().partial_cmp(other)
     }
 }
 
-impl<T, const N: usize, U, const M: usize> PartialOrd<InlineVec<U, M>> for InlineDeque<T, N>
+impl<T, const N: usize, const M: usize> PartialOrd<InlineVec<T, M>> for InlineDeque<T, N>
 where
-    T: PartialOrd<U>,
+    T: PartialOrd,
 {
-    fn partial_cmp(&self, other: &InlineVec<U, M>) -> Option<Ordering> {
+    fn partial_cmp(&self, other: &InlineVec<T, M>) -> Option<Ordering> {
         self.iter().partial_cmp(other)
     }
 }
 
-impl<T, const N: usize, U, const M: usize> PartialOrd<[U; M]> for InlineDeque<T, N>
+impl<T, const N: usize, const M: usize> PartialOrd<[T; M]> for InlineDeque<T, N>
 where
-    T: PartialOrd<U>,
+    T: PartialOrd,
 {
-    fn partial_cmp(&self, other: &[U; M]) -> Option<Ordering> {
+    fn partial_cmp(&self, other: &[T; M]) -> Option<Ordering> {
         self.iter().partial_cmp(other)
     }
 }
 
-impl<T, const N: usize, U> PartialOrd<[U]> for InlineDeque<T, N>
+impl<T, const N: usize> PartialOrd<[T]> for InlineDeque<T, N>
 where
-    T: PartialOrd<U>,
+    T: PartialOrd,
 {
-    fn partial_cmp(&self, other: &[U]) -> Option<Ordering> {
+    fn partial_cmp(&self, other: &[T]) -> Option<Ordering> {
         self.iter().partial_cmp(other)
     }
 }
 
-impl<T, const N: usize, U, const M: usize> PartialOrd<InlineDeque<U, M>> for [T; N]
+impl<T, const N: usize, const M: usize> PartialOrd<InlineDeque<T, M>> for [T; N]
 where
-    T: PartialOrd<U>,
+    T: PartialOrd,
 {
-    fn partial_cmp(&self, other: &InlineDeque<U, M>) -> Option<Ordering> {
+    fn partial_cmp(&self, other: &InlineDeque<T, M>) -> Option<Ordering> {
         self.iter().partial_cmp(other)
     }
 }
 
-impl<T, U, const M: usize> PartialOrd<InlineDeque<U, M>> for [T]
+impl<T, const N: usize> PartialOrd<InlineDeque<T, N>> for [T]
 where
-    T: PartialOrd<U>,
+    T: PartialOrd,
 {
-    fn partial_cmp(&self, other: &InlineDeque<U, M>) -> Option<Ordering> {
+    fn partial_cmp(&self, other: &InlineDeque<T, N>) -> Option<Ordering> {
         self.iter().partial_cmp(other)
     }
 }
