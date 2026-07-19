@@ -3,17 +3,17 @@ use crate::buf::Buf;
 use crate::error::StringError;
 use crate::vec::InlineVec;
 use core::borrow::{Borrow, BorrowMut};
-use core::cmp::Ordering;
 use core::fmt;
 use core::ops::{Deref, DerefMut, Index, IndexMut};
 use core::slice::SliceIndex;
 
+mod cmp;
 mod convert;
 
 #[cfg(feature = "serde")]
 mod serde;
 
-#[derive(Clone, Default, Hash, Eq, Ord)]
+#[derive(Clone, Default, Hash)]
 pub struct InlineString<const N: usize> {
     vec: InlineVec<u8, N>,
 }
@@ -342,30 +342,6 @@ impl<const N: usize> Borrow<str> for InlineString<N> {
 impl<const N: usize> BorrowMut<str> for InlineString<N> {
     fn borrow_mut(&mut self) -> &mut str {
         self.as_mut_str()
-    }
-}
-
-impl<const N: usize, const M: usize> PartialEq<InlineString<M>> for InlineString<N> {
-    fn eq(&self, other: &InlineString<M>) -> bool {
-        self.as_str().eq(other.as_str())
-    }
-}
-
-impl<const N: usize> PartialEq<str> for InlineString<N> {
-    fn eq(&self, other: &str) -> bool {
-        self.as_str().eq(other)
-    }
-}
-
-impl<const N: usize> PartialEq<InlineString<N>> for str {
-    fn eq(&self, other: &InlineString<N>) -> bool {
-        self.eq(other.as_str())
-    }
-}
-
-impl<const N: usize, const M: usize> PartialOrd<InlineString<M>> for InlineString<N> {
-    fn partial_cmp(&self, other: &InlineString<M>) -> Option<Ordering> {
-        self.as_str().partial_cmp(other.as_str())
     }
 }
 
