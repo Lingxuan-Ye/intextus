@@ -16,7 +16,7 @@ where
     T: PartialEq<U>,
 {
     fn eq(&self, other: &InlineDeque<U, M>) -> bool {
-        self.iter().eq(other)
+        self.as_slice().eq(other)
     }
 }
 

@@ -16,7 +16,7 @@ where
     T: PartialEq<U>,
 {
     fn eq(&self, other: &InlineVec<U, M>) -> bool {
-        self.iter().eq(other)
+        self.eq(other.as_slice())
     }
 }
 
@@ -25,7 +25,7 @@ where
     T: PartialEq<U>,
 {
     fn eq(&self, other: &[U; M]) -> bool {
-        self.iter().eq(other)
+        self.eq(other.as_slice())
     }
 }
 
@@ -34,7 +34,7 @@ where
     T: PartialEq<U>,
 {
     fn eq(&self, other: &&[U; M]) -> bool {
-        self.iter().eq(other.as_slice())
+        self.eq(other.as_slice())
     }
 }
 
@@ -43,7 +43,7 @@ where
     T: PartialEq<U>,
 {
     fn eq(&self, other: &&mut [U; M]) -> bool {
-        self.iter().eq(other.as_slice())
+        self.eq(other.as_slice())
     }
 }
 
@@ -52,7 +52,13 @@ where
     T: PartialEq<U>,
 {
     fn eq(&self, other: &[U]) -> bool {
-        self.iter().eq(other)
+        if self.len() != other.len() {
+            return false;
+        }
+        let lhs = self.as_slices();
+        let mid = lhs.0.len();
+        let rhs = unsafe { other.split_at_unchecked(mid) };
+        lhs.0.eq(rhs.0) && lhs.1.eq(rhs.1)
     }
 }
 
@@ -61,7 +67,7 @@ where
     T: PartialEq<U>,
 {
     fn eq(&self, other: &&[U]) -> bool {
-        self.iter().eq(other.iter())
+        self.eq(*other)
     }
 }
 
@@ -70,7 +76,7 @@ where
     T: PartialEq<U>,
 {
     fn eq(&self, other: &&mut [U]) -> bool {
-        self.iter().eq(other.iter())
+        self.eq(*other)
     }
 }
 
@@ -79,7 +85,7 @@ where
     T: PartialEq<U>,
 {
     fn eq(&self, other: &InlineDeque<U, M>) -> bool {
-        self.iter().eq(other)
+        self.as_slice().eq(other)
     }
 }
 
@@ -88,7 +94,13 @@ where
     T: PartialEq<U>,
 {
     fn eq(&self, other: &InlineDeque<U, M>) -> bool {
-        self.iter().eq(other)
+        if self.len() != other.len() {
+            return false;
+        }
+        let rhs = other.as_slices();
+        let mid = rhs.0.len();
+        let lhs = unsafe { self.split_at_unchecked(mid) };
+        lhs.0.eq(rhs.0) && lhs.1.eq(rhs.1)
     }
 }
 
@@ -97,7 +109,7 @@ where
     T: PartialEq<U>,
 {
     fn eq(&self, other: &InlineDeque<U, M>) -> bool {
-        self.iter().eq(other)
+        self[..].eq(other)
     }
 }
 
@@ -106,7 +118,7 @@ where
     T: PartialEq<U>,
 {
     fn eq(&self, other: &InlineDeque<U, M>) -> bool {
-        self.iter().eq(other)
+        self[..].eq(other)
     }
 }
 
